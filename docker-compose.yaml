@@ -1,0 +1,9 @@
+services:
+  dl_basic_final:
+    image: dl_basic_final
+    build:
+      context: .
+      dockerfile: Dockerfile
+    tty: true
+    volumes:
+      - ./:/root/
