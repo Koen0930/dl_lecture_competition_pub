@@ -5,6 +5,7 @@ outputs/
 preprocess.py
 eval_omnicampus.py
 .github/
+.bash_history
 
 # -------------------
 #   Python template
