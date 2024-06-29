@@ -4,6 +4,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    shm_size: '2g'
     tty: true
     volumes:
       - ./:/root/
