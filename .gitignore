@@ -9,6 +9,7 @@ eval_omnicampus.py
 .cursor-server
 .gnupg
 .ssh
+.local
 .gitconfig
 
 # -------------------
