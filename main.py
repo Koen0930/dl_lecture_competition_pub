@@ -10,7 +10,7 @@ from termcolor import cprint
 from tqdm import tqdm
 
 from src.datasets import ThingsMEGDataset
-from src.models import BasicConvClassifier
+from src.models import BasicConvClassifier, ConvRNNClassifier, BasicLSTMClassifier
 from src.utils import set_seed
 
 
@@ -39,9 +39,19 @@ def run(args: DictConfig):
     # ------------------
     #       Model
     # ------------------
+    
     model = BasicConvClassifier(
         train_set.num_classes, train_set.seq_len, train_set.num_channels
     ).to(args.device)
+    
+    # model = BasicLSTMClassifier(
+    #     train_set.num_classes, train_set.seq_len, train_set.num_channels
+    # ).to(args.device)
+    
+    # model = ConvRNNClassifier(
+    #     train_set.num_classes, train_set.seq_len, train_set.num_channels
+    # ).to(args.device)
+    
 
     # ------------------
     #     Optimizer
