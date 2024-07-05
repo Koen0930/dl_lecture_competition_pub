@@ -6,6 +6,10 @@ preprocess.py
 eval_omnicampus.py
 .github/
 .bash_history
+.cursor-server
+.gnupg
+.ssh
+.gitconfig
 
 # -------------------
 #   Python template
