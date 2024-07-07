@@ -6,9 +6,9 @@ loss: topk
 #loss: ce
 
 # model: CRNN
-# model: BasicConv
+model: BasicConv
 # model: LSTM
-model: Conformer
+# model: Conformer
 
 device: cuda:0
 num_workers: 4
