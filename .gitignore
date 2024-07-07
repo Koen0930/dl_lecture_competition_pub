@@ -11,6 +11,8 @@ eval_omnicampus.py
 .ssh
 .local
 .gitconfig
+.config/
+.vscode/
 
 # -------------------
 #   Python template

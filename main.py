@@ -1,4 +1,6 @@
 import os, sys
+import contextlib
+import io
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -8,6 +10,7 @@ from omegaconf import DictConfig
 import wandb
 from termcolor import cprint
 from tqdm import tqdm
+from topk.svm import SmoothTopkSVM
 
 from src.datasets import ThingsMEGDataset
 from src.models import BasicConvClassifier, ConvRNNClassifier, BasicLSTMClassifier
@@ -65,6 +68,14 @@ def run(args: DictConfig):
     accuracy = Accuracy(
         task="multiclass", num_classes=train_set.num_classes, top_k=10
     ).to(args.device)
+    
+    if args.loss == "topk":
+        loss_fn = SmoothTopkSVM(n_classes=train_set.num_classes, alpha=None,
+                                tau=1, k=10).cuda(args.device)
+    elif args.loss == "ce":
+        loss_fn = F.cross_entropy
+    else:
+        raise ValueError(f"Loss {args.loss} not supported")
       
     for epoch in range(args.epochs):
         print(f"Epoch {epoch+1}/{args.epochs}")
@@ -77,7 +88,7 @@ def run(args: DictConfig):
 
             y_pred = model(X)
             
-            loss = F.cross_entropy(y_pred, y)
+            loss = loss_fn(y_pred, y)
             train_loss.append(loss.item())
             
             optimizer.zero_grad()
@@ -94,7 +105,7 @@ def run(args: DictConfig):
             with torch.no_grad():
                 y_pred = model(X)
             
-            val_loss.append(F.cross_entropy(y_pred, y).item())
+            val_loss.append(loss_fn(y_pred, y).item())
             val_acc.append(accuracy(y_pred, y).item())
 
         print(f"Epoch {epoch+1}/{args.epochs} | train loss: {np.mean(train_loss):.3f} | train acc: {np.mean(train_acc):.3f} | val loss: {np.mean(val_loss):.3f} | val acc: {np.mean(val_acc):.3f}")
