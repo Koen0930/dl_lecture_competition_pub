@@ -1,6 +1,4 @@
 import os, sys
-import contextlib
-import io
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -13,7 +11,7 @@ from tqdm import tqdm
 from topk.svm import SmoothTopkSVM
 
 from src.datasets import ThingsMEGDataset
-from src.models import BasicConvClassifier
+from src.models import BasicConvClassifier, ConvRNNClassifier, BasicLSTMClassifier
 from src.utils import set_seed
 
 
@@ -42,9 +40,19 @@ def run(args: DictConfig):
     # ------------------
     #       Model
     # ------------------
-    model = BasicConvClassifier(
-        train_set.num_classes, train_set.seq_len, train_set.num_channels
-    ).to(args.device)
+    
+    if args.model == "ConvRNN":
+        model = ConvRNNClassifier(
+            train_set.num_classes, train_set.seq_len, train_set.num_channels
+        ).to(args.device)
+    elif args.model == "BasicConv":
+        model = BasicConvClassifier(
+            train_set.num_classes, train_set.seq_len, train_set.num_channels
+        ).to(args.device)
+    elif args.model == "LSTM":
+        model = BasicLSTMClassifier(
+            train_set.num_classes, train_set.seq_len, train_set.num_channels
+        ).to(args.device)
 
     # ------------------
     #     Optimizer
