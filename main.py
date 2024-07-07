@@ -59,8 +59,13 @@ def run(args: DictConfig):
         task="multiclass", num_classes=train_set.num_classes, top_k=10
     ).to(args.device)
     
-    loss_fn = SmoothTopkSVM(n_classes=train_set.num_classes, alpha=None,
-                                    tau=1, k=10).cuda(args.device)
+    if args.loss == "topk":
+        loss_fn = SmoothTopkSVM(n_classes=train_set.num_classes, alpha=None,
+                                tau=1, k=10).cuda(args.device)
+    elif args.loss == "ce":
+        loss_fn = F.cross_entropy
+    else:
+        raise ValueError(f"Loss {args.loss} not supported")
       
     for epoch in range(args.epochs):
         print(f"Epoch {epoch+1}/{args.epochs}")
