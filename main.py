@@ -13,7 +13,10 @@ from topk.svm import SmoothTopkSVM
 from src.datasets import ThingsMEGDataset
 from src.models import BasicConvClassifier, ConvRNNClassifier, BasicLSTMClassifier
 from src.utils import set_seed
+from src.conformer import Conformer
 
+os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2'  # すべてのGPUを指定
 
 @hydra.main(version_base=None, config_path="configs", config_name="config")
 def run(args: DictConfig):
@@ -53,6 +56,8 @@ def run(args: DictConfig):
         model = BasicLSTMClassifier(
             train_set.num_classes, train_set.seq_len, train_set.num_channels
         ).to(args.device)
+    elif args.model == "Conformer":
+        model = Conformer(n_classes=train_set.num_classes)
 
     # ------------------
     #     Optimizer
@@ -83,8 +88,11 @@ def run(args: DictConfig):
         model.train()
         for X, y, subject_idxs in tqdm(train_loader, desc="Train"):
             X, y = X.to(args.device), y.to(args.device)
-
-            y_pred = model(X)
+            if args.model == "Conformer":
+                X = X.unsqueeze(1)
+                _, y_pred = model(X)
+            else:
+                y_pred = model(X)
             
             loss = loss_fn(y_pred, y)
             train_loss.append(loss.item())
@@ -99,9 +107,13 @@ def run(args: DictConfig):
         model.eval()
         for X, y, subject_idxs in tqdm(val_loader, desc="Validation"):
             X, y = X.to(args.device), y.to(args.device)
-            
-            with torch.no_grad():
-                y_pred = model(X)
+            if args.model == "Conformer":
+                X = X.unsqueeze(1)
+                with torch.no_grad():
+                    _, y_pred = model(X)
+            else:
+                with torch.no_grad():
+                    y_pred = model(X)
             
             val_loss.append(loss_fn(y_pred, y).item())
             val_acc.append(accuracy(y_pred, y).item())
