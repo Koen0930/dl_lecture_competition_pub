@@ -1,6 +1,8 @@
 batch_size: 128
 epochs: 10
 lr: 0.001
+loss: topk 
+#loss: ce
 
 device: cuda:0
 num_workers: 4
