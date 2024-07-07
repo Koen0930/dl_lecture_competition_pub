@@ -23,3 +23,8 @@ COPY requirements.txt /root/requirements.txt
 RUN pip install -r /root/requirements.txt && \
     pip uninstall -y numpy && \
     pip install numpy==1.26.4
+
+RUN mkdir -p /tmp && \
+    git clone https://github.com/oval-group/smooth-topk.git /tmp/smooth-topk && \
+    cd /tmp/smooth-topk && \
+    python3 setup.py install
