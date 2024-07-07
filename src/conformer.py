@@ -71,16 +71,16 @@ class PatchEmbedding(nn.Module):
         super().__init__()
 
         self.shallownet = nn.Sequential(
-            nn.Conv2d(1, 40, (1, 25), (1, 1)),
-            nn.Conv2d(40, 40, (22, 1), (1, 1)),
-            nn.BatchNorm2d(40),
+            nn.Conv2d(1, 10, (1, 10), (1, 1)),
+            nn.Conv2d(10, 10, (11, 1), (1, 1)),
+            nn.BatchNorm2d(10),
             nn.ELU(),
             nn.AvgPool2d((1, 75), (1, 15)),  # pooling acts as slicing to obtain 'patch' along the time dimension as in ViT
             nn.Dropout(0.5),
         )
 
         self.projection = nn.Sequential(
-            nn.Conv2d(40, emb_size, (1, 1), stride=(1, 1)),  # transpose, conv could enhance fiting ability slightly
+            nn.Conv2d(10, emb_size, (1, 1), stride=(1, 1)),  # transpose, conv could enhance fiting ability slightly
             Rearrange('b e (h) (w) -> b (h w) e'),
         )
 
@@ -151,9 +151,9 @@ class GELU(nn.Module):
 class TransformerEncoderBlock(nn.Sequential):
     def __init__(self,
                  emb_size,
-                 num_heads=10,
+                 num_heads=1,
                  drop_p=0.5,
-                 forward_expansion=4,
+                 forward_expansion=1,
                  forward_drop_p=0.5):
         super().__init__(
             ResidualAdd(nn.Sequential(
@@ -186,13 +186,13 @@ class ClassificationHead(nn.Sequential):
             nn.Linear(emb_size, n_classes)
         )
         self.fc = nn.Sequential(
-            nn.Linear(2440, 256),
+            nn.Linear(29232, 256),
             nn.ELU(),
             nn.Dropout(0.5),
             nn.Linear(256, 32),
             nn.ELU(),
             nn.Dropout(0.3),
-            nn.Linear(32, 4)
+            nn.Linear(32, n_classes)
         )
 
     def forward(self, x):
@@ -201,14 +201,19 @@ class ClassificationHead(nn.Sequential):
         return x, out
 
 
-class Conformer(nn.Sequential):
-    def __init__(self, emb_size=40, depth=6, n_classes=4, **kwargs):
-        super().__init__(
+class Conformer(nn.Module):
+    def __init__(self, n_classes, emb_size=8, depth=1, **kwargs):
+        super().__init__()
+        
+        self.patch_embedding = PatchEmbedding(emb_size).to('cuda:0')
+        self.transformer_encoder = TransformerEncoder(depth, emb_size).to('cuda:1')
+        self.classification_head = ClassificationHead(emb_size, n_classes).to('cuda:2')
 
-            PatchEmbedding(emb_size),
-            TransformerEncoder(depth, emb_size),
-            ClassificationHead(emb_size, n_classes)
-        )
+    def forward(self, x):
+        x = self.patch_embedding(x.to('cuda:0'))
+        x = self.transformer_encoder(x.to('cuda:1'))
+        x = self.classification_head(x.to('cuda:2'))
+        return x
 
 
 class ExP():
