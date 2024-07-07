@@ -41,18 +41,18 @@ def run(args: DictConfig):
     #       Model
     # ------------------
     
-    # model = BasicConvClassifier(
-    #     train_set.num_classes, train_set.seq_len, train_set.num_channels
-    # ).to(args.device)
-    
-    # model = BasicLSTMClassifier(
-    #     train_set.num_classes, train_set.seq_len, train_set.num_channels
-    # ).to(args.device)
-    
-    model = ConvRNNClassifier(
-        train_set.num_classes, train_set.seq_len, train_set.num_channels
-    ).to(args.device)
-    
+    if args.model == "ConvRNN":
+        model = ConvRNNClassifier(
+            train_set.num_classes, train_set.seq_len, train_set.num_channels
+        ).to(args.device)
+    elif args.model == "BasicConv":
+        model = BasicConvClassifier(
+            train_set.num_classes, train_set.seq_len, train_set.num_channels
+        ).to(args.device)
+    elif args.model == "LSTM":
+        model = BasicLSTMClassifier(
+            train_set.num_classes, train_set.seq_len, train_set.num_channels
+        ).to(args.device)
 
     # ------------------
     #     Optimizer
