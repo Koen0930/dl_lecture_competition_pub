@@ -207,12 +207,12 @@ class Conformer(nn.Module):
         
         self.patch_embedding = PatchEmbedding(emb_size).to('cuda:0')
         self.transformer_encoder = TransformerEncoder(depth, emb_size).to('cuda:1')
-        self.classification_head = ClassificationHead(emb_size, n_classes).to('cuda:2')
+        self.classification_head = ClassificationHead(emb_size, n_classes).to('cuda:0')
 
     def forward(self, x):
         x = self.patch_embedding(x.to('cuda:0'))
         x = self.transformer_encoder(x.to('cuda:1'))
-        x = self.classification_head(x.to('cuda:2'))
+        x = self.classification_head(x.to('cuda:0'))
         return x
 
 

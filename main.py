@@ -70,11 +70,11 @@ def run(args: DictConfig):
     max_val_acc = 0
     accuracy = Accuracy(
         task="multiclass", num_classes=train_set.num_classes, top_k=10
-    ).to("cuda:2")
+    ).to(args.device)
     
     if args.loss == "topk":
         loss_fn = SmoothTopkSVM(n_classes=train_set.num_classes, alpha=None,
-                                tau=1, k=10).cuda("cuda:2")
+                                tau=1, k=10).cuda(args.device)
     elif args.loss == "ce":
         loss_fn = F.cross_entropy
     else:
@@ -87,7 +87,7 @@ def run(args: DictConfig):
         
         model.train()
         for X, y, subject_idxs in tqdm(train_loader, desc="Train"):
-            X, y = X.to(args.device), y.to("cuda:2")
+            X, y = X.to(args.device), y.to(args.device)
             X = X.unsqueeze(1)
 
             _, y_pred = model(X)
@@ -104,7 +104,7 @@ def run(args: DictConfig):
 
         model.eval()
         for X, y, subject_idxs in tqdm(val_loader, desc="Validation"):
-            X, y = X.to(args.device), y.to("cuda:2")
+            X, y = X.to(args.device), y.to(args.device)
             X = X.unsqueeze(1)
             
             with torch.no_grad():
