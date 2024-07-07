@@ -43,7 +43,7 @@ class ConvBlock(nn.Module):
         in_dim,
         out_dim,
         kernel_size: int = 3,
-        p_drop: float = 0.5,
+        p_drop: float = 0.1,
     ) -> None:
         super().__init__()
         
@@ -86,7 +86,7 @@ class ConvRNNClassifier(nn.Module):
         hid_dim3: int = 64,
         rnn_hidden_dim: int = 1024,
         mlp_hidden_dim1: int = 2048,
-        num_layers: int = 5,
+        num_layers: int = 2,
         p_drop: float = 0.5
     ) -> None:
         super().__init__()
