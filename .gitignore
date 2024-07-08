@@ -13,6 +13,7 @@ eval_omnicampus.py
 .gitconfig
 .config/
 .vscode/
+.mne/
 
 # -------------------
 #   Python template

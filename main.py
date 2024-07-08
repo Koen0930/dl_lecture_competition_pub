@@ -14,6 +14,7 @@ from src.datasets import ThingsMEGDataset
 from src.models import BasicConvClassifier, ConvRNNClassifier, BasicLSTMClassifier
 from src.utils import set_seed
 from src.conformer import Conformer
+from src.utils import ChannelMerger
 
 os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2'  # すべてのGPUを指定
@@ -79,19 +80,35 @@ def run(args: DictConfig):
         loss_fn = F.cross_entropy
     else:
         raise ValueError(f"Loss {args.loss} not supported")
-      
+
+    merger_channels = 271
+    merger_pos_dim = 32
+    merger_dropout = 0.2
+    merger_penalty = 0
+    n_subjects = 4
+    position_list = torch.load("/root/data/position_list.pt").to(args.device)
+    merger = ChannelMerger(
+            merger_channels, position_list, pos_dim=merger_pos_dim, dropout=merger_dropout,
+            usage_penalty=merger_penalty, n_subjects=n_subjects
+            ).to(args.device)
+    
     for epoch in range(args.epochs):
         print(f"Epoch {epoch+1}/{args.epochs}")
         
         train_loss, train_acc, val_loss, val_acc = [], [], [], []
         
         model.train()
-        for X, y, subject_idxs in tqdm(train_loader, desc="Train"):
-            X, y = X.to(args.device), y.to(args.device)
+        for X, y, subject in tqdm(train_loader, desc="Train"):
+            # X = bandpass(X)
+            # X = FFT(X)
+            # Xの次元を(batch_size, 1, seq_len, num_channels)にする
+
+            X, y, subject = X.to(args.device), y.to(args.device), subject.to(args.device)
             if args.model == "Conformer":
                 X = X.unsqueeze(1)
                 _, y_pred = model(X)
             else:
+                X = merger(X, subject)
                 y_pred = model(X)
             
             loss = loss_fn(y_pred, y)
@@ -105,14 +122,17 @@ def run(args: DictConfig):
             train_acc.append(acc.item())
 
         model.eval()
-        for X, y, subject_idxs in tqdm(val_loader, desc="Validation"):
-            X, y = X.to(args.device), y.to(args.device)
+        for X, y, subject in tqdm(val_loader, desc="Validation"):
+            # X= bandpass(X)
+            # X = FFT(X)
+            X, y, subject = X.to(args.device), y.to(args.device), subject.to(args.device)
             if args.model == "Conformer":
                 X = X.unsqueeze(1)
                 with torch.no_grad():
                     _, y_pred = model(X)
             else:
                 with torch.no_grad():
+                    X = merger(X, subject)
                     y_pred = model(X)
             
             val_loss.append(loss_fn(y_pred, y).item())
@@ -136,7 +156,7 @@ def run(args: DictConfig):
 
     preds = [] 
     model.eval()
-    for X, subject_idxs in tqdm(test_loader, desc="Validation"):        
+    for X, subject in tqdm(test_loader, desc="Validation"):        
         preds.append(model(X.to(args.device)).detach().cpu())
         
     preds = torch.cat(preds, dim=0).numpy()
