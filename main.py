@@ -14,6 +14,7 @@ from src.datasets import ThingsMEGDataset
 from src.models import BasicConvClassifier, ConvRNNClassifier, BasicLSTMClassifier
 from src.utils import set_seed
 from src.conformer import Conformer
+from src.utils import MEGEncoder
 
 os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2'  # すべてのGPUを指定
@@ -79,20 +80,23 @@ def run(args: DictConfig):
         loss_fn = F.cross_entropy
     else:
         raise ValueError(f"Loss {args.loss} not supported")
-      
+
+    position_list = torch.load("/root/data/position_list.pt").to(args.device)
+    model = MEGEncoder(position_list).to(args.device)
+    
     for epoch in range(args.epochs):
         print(f"Epoch {epoch+1}/{args.epochs}")
         
         train_loss, train_acc, val_loss, val_acc = [], [], [], []
         
         model.train()
-        for X, y, subject_idxs in tqdm(train_loader, desc="Train"):
+        for X, y, subject in tqdm(train_loader, desc="Train"):
             X, y = X.to(args.device), y.to(args.device)
             if args.model == "Conformer":
                 X = X.unsqueeze(1)
                 _, y_pred = model(X)
             else:
-                y_pred = model(X)
+                y_pred = model(X, subject)
             
             loss = loss_fn(y_pred, y)
             train_loss.append(loss.item())
@@ -105,7 +109,7 @@ def run(args: DictConfig):
             train_acc.append(acc.item())
 
         model.eval()
-        for X, y, subject_idxs in tqdm(val_loader, desc="Validation"):
+        for X, y, subject in tqdm(val_loader, desc="Validation"):
             X, y = X.to(args.device), y.to(args.device)
             if args.model == "Conformer":
                 X = X.unsqueeze(1)
@@ -113,7 +117,7 @@ def run(args: DictConfig):
                     _, y_pred = model(X)
             else:
                 with torch.no_grad():
-                    y_pred = model(X)
+                    y_pred = model(X, subject)
             
             val_loss.append(loss_fn(y_pred, y).item())
             val_acc.append(accuracy(y_pred, y).item())
