@@ -3,6 +3,7 @@ import numpy as np
 import torch
 from typing import Tuple
 from termcolor import cprint
+from PIL import Image
 
 
 class ThingsMEGDataset(torch.utils.data.Dataset):
@@ -47,18 +48,32 @@ class ImageDataset(torch.utils.data.Dataset):
         self.num_classes = 1854
         self.transform = transform
         
-        self.X = torch.load(os.path.join(data_dir, f"{split}_images.pt"))
+        # テキストファイルを1行ずつ読む
+        with open(os.path.join(data_dir, f"{split}_image_paths.txt"), "r") as f:
+            # 最後の改行を削除
+            lines = f.readlines()
+            lines = [line.rstrip() for line in lines]
+
+        for i, line in enumerate(lines):
+            if "/" not in line:
+                # lineの一番最後の_より前の文字を取得
+                last_underscore_index = line.rfind('_')
+                if last_underscore_index != -1:
+                    line = f"{line[:last_underscore_index]}/{line}"
+                lines[i] = line
+        
+        self.image_paths = lines
         self.y = torch.load(os.path.join(data_dir, f"{split}_y.pt"))
         assert len(torch.unique(self.y)) == self.num_classes, "Number of classes do not match."
 
     def __len__(self) -> int:
-        return len(self.X)
+        return len(self.image_paths)
 
     def __getitem__(self, i):
         if self.transform:
-            return self.transform(self.X[i]), self.y[i]
-        else:
-            return self.X[i], self.y[i]
+            self.X = Image.open(f"/root/data/Images/{self.image_paths[i]}")
+            self.X = self.transform(self.X)
+            return self.X, self.y[i]
         
     @property
     def height(self) -> int:

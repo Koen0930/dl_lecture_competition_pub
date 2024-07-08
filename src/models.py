@@ -2,6 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops.layers.torch import Rearrange
+from torchvision import models
+
+from .utils import MEGEncoder
 
 
 class BasicConvClassifier(nn.Module):
@@ -151,3 +154,48 @@ class BasicLSTMClassifier(nn.Module):
         X = X[:, -1, :]  # Take the last output of the RNN
 
         return self.head(X)
+
+class CLIPModel(nn.Module):
+    def __init__(
+        self,
+        postion_list: List[int],
+        im_weight_path: str,
+        image_encoder: str,
+    ) -> None:
+        super().__init__()
+        self.temperature = temperature
+        if image_encoder == "resnet50":
+            self.ImageEncoder = models.resnet50(weights=im_weight_path)
+            self.meg_encoder = MEGEncoder(position_list, out_channels=2048)
+        elif image_encoder == "efficientnet_v2_s":
+            self.ImageEncoder = models.efficientnet_v2_s(weights=im_weight_path)
+            self.meg_encoder = MEGEncoder(position_list, out_channels=1280)
+        else:
+            raise ValueError(f"Unsupported image encoder: {image_encoder}")
+
+    def forward(self, image: torch.Tensor, meg: torch.Tensor, subject: torch.Tensor) -> torch.Tensor:
+        encoded_image = self.ImageEncoder(image)
+        encoded_meg = self.meg_encoder(meg, subject)
+        return encoded_image, encoded_meg
+
+
+class CLIPLoss(nn.Module):
+    def __init__(self, temperature=1) -> None:
+        super().__init__()
+        self.temperature = temperature
+
+    def forward(self, encoded_image: torch.Tensor, encoded_meg: torch.Tensor) -> torch.Tensor:
+        # Normalize the embeddings
+        encoded_image = F.normalize(encoded_image, dim=-1)
+        encoded_meg = F.normalize(encoded_meg, dim=-1)
+        
+        logits = torch.matmul(encoded_image, encoded_meg.T) * torch.exp(self.temperature)
+        loss = F.cross_entropy(logits, labels)
+
+        # symmetric loss function
+        labels = np.arange(n)
+        loss_i = cross_entropy_loss(logits, labels, axis=0)
+        loss_t = cross_entropy_loss(logits, labels, axis=1)
+        loss = (loss_i + loss_t)/2
+        
+        return loss

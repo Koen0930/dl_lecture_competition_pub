@@ -19,7 +19,7 @@ from src.conformer import Conformer
 from src.utils import MEGEncoder
 
 os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2'  # すべてのGPUを指定
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'  # すべてのGPUを指定
 
 @hydra.main(version_base=None, config_path="configs", config_name="image_config")
 def run(args: DictConfig):
@@ -35,10 +35,9 @@ def run(args: DictConfig):
     transform = transforms.Compose([
         transforms.Resize(224),
         transforms.CenterCrop(224),
-        # transforms.ToTensor(),
+        transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
-    
 
     # ------------------
     #    Dataloader
@@ -55,12 +54,23 @@ def run(args: DictConfig):
     # ------------------
     # 学習済みモデルの読み込み
     # Resnet50を重み付きで読み込む
-    model_ft = models.resnet50(pretrained = True)
+    if args.model == "resnet50":
+        model_ft = models.resnet50(pretrained=True)
+        # 最終ノードの出力を変更する
+        model_ft.fc = nn.Linear(model_ft.fc.in_features, train_set.num_classes)
+        net = model_ft.to(args.device)
+    elif args.model == "resnet18":
+        model_ft = models.resnet18(pretrained=True)
+        # 最終ノードの出力を変更する
+        model_ft.fc = nn.Linear(model_ft.fc.in_features, train_set.num_classes)
+        net = model_ft.to(args.device)
+    elif args.model == "efficientnet_v2_s":
+        model_ft = models.efficientnet_v2_s(weights=models.EfficientNet_V2_S_Weights.DEFAULT)
+        # 最終ノードの出力を変更する
+        model_ft.classifier[1] = nn.Linear(model_ft.classifier[1].in_features, train_set.num_classes)
+        net = model_ft.to(args.device)
 
-    # 最終ノードの出力を10に変更する
-    model_ft.fc = nn.Linear(model_ft.fc.in_features, train_set.num_classes)
     
-    net = model_ft.to(args.device)
     
     # ------------------
     #     Optimizer
@@ -72,16 +82,10 @@ def run(args: DictConfig):
     # ------------------  
     max_val_acc = 0
     accuracy = Accuracy(
-        task="multiclass", num_classes=train_set.num_classes, top_k=10
+        task="multiclass", num_classes=train_set.num_classes
     ).to(args.device)
     
-    if args.loss == "topk":
-        loss_fn = SmoothTopkSVM(n_classes=train_set.num_classes, alpha=None,
-                                tau=1, k=10).cuda(args.device)
-    elif args.loss == "ce":
-        loss_fn = F.cross_entropy
-    else:
-        raise ValueError(f"Loss {args.loss} not supported")
+    loss_fn = F.cross_entropy
     
     for epoch in range(args.epochs):
         print(f"Epoch {epoch+1}/{args.epochs}")
