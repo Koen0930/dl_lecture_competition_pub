@@ -84,3 +84,19 @@ class ImageDataset(torch.utils.data.Dataset):
     def width(self) -> int:
         # 画像の幅
         return self.X.shape[3]
+
+
+class ImageMEGDataset(torch.utils.data.Dataset):
+    def __init__(self, split: str, data_dir: str = "data", transform = None) -> None:
+        super().__init__()
+        
+        assert split in ["train", "val"], f"Invalid split: {split}"
+        self.split = split
+        self.num_classes = 1854
+        self.transform = transform
+        
+        self.meg = torch.load(os.path.join(data_dir, f"{split}_X.pt"))
+        self.subject_idxs = torch.load(os.path.join(data_dir, f"{split}_subject_idxs.pt"))
+        
+        self.y = torch.load(os.path.join(data_dir, f"{split}_y.pt"))
+        assert len(torch.unique(self.y)) == self.num_classes, "Number of classes do not match."

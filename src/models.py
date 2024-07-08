@@ -190,12 +190,11 @@ class CLIPLoss(nn.Module):
         encoded_meg = F.normalize(encoded_meg, dim=-1)
         
         logits = torch.matmul(encoded_image, encoded_meg.T) * torch.exp(self.temperature)
-        loss = F.cross_entropy(logits, labels)
 
         # symmetric loss function
-        labels = np.arange(n)
-        loss_i = cross_entropy_loss(logits, labels, axis=0)
-        loss_t = cross_entropy_loss(logits, labels, axis=1)
+        labels = torch.arange(encoded_image.size(0))
+        loss_i = F.cross_entropy(logits, labels, axis=0)
+        loss_t = F.cross_entropy(logits, labels, axis=1)
         loss = (loss_i + loss_t)/2
         
         return loss
