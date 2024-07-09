@@ -82,7 +82,7 @@ def run(args: DictConfig):
     for epoch in range(args.epochs):
         print(f"Epoch {epoch+1}/{args.epochs}")
         
-        train_loss, train_acc, val_loss = [], [], []
+        train_loss, train_acc, val_loss, val_acc = [], [], [], []
         
         model.train()
         for image, meg, subject_idxs, y in tqdm(train_loader, desc="Train"):
