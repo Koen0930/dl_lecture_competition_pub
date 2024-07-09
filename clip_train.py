@@ -72,7 +72,9 @@ def run(args: DictConfig):
     # ------------------
     #   Start training
     # ------------------  
-    
+    accuracy = Accuracy(
+        task="multiclass", num_classes=train_set.num_classes, top_k=10
+    ).to(args.device)
     loss_fn = CLIPLoss().to(args.device)
     
     min_val_loss = float("inf")
@@ -80,32 +82,39 @@ def run(args: DictConfig):
     for epoch in range(args.epochs):
         print(f"Epoch {epoch+1}/{args.epochs}")
         
-        train_loss, val_loss = [], []
+        train_loss, train_acc, val_loss = [], [], []
         
         model.train()
         for image, meg, subject_idxs, y in tqdm(train_loader, desc="Train"):
             image, meg, subject_idxs, y = image.to(args.device), meg.to(args.device), subject_idxs.to(args.device), y.to(args.device)
             encoded_image, encoded_meg = model(image, meg, subject_idxs)
             
-            loss = loss_fn(encoded_image, encoded_meg)
+            loss = loss_fn(encoded_image, encoded_meg, y)
+            y_pred = model.final_layer(encoded_meg)
             train_loss.append(loss.item())
             
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            
+            acc = accuracy(y_pred, y)
+            train_acc.append(acc.item())
 
         model.eval()
         for image, meg, subject_idxs, y in tqdm(val_loader, desc="Validation"):
             image, meg, subject_idxs, y = image.to(args.device), meg.to(args.device), subject_idxs.to(args.device), y.to(args.device)
             with torch.no_grad():
                 encoded_image, encoded_meg = model(image, meg, subject_idxs)
+                y_pred = model.final_layer(encoded_meg)
+                acc = accuracy(y_pred, y)
+                val_acc.append(acc.item())
             
-            val_loss.append(loss_fn(encoded_image, encoded_meg).item())
+            val_loss.append(loss_fn(encoded_image, encoded_meg, y).item())
 
-        print(f"Epoch {epoch+1}/{args.epochs} | train loss: {np.mean(train_loss):.3f} | val loss: {np.mean(val_loss):.3f}")
+        print(f"Epoch {epoch+1}/{args.epochs} | train loss: {np.mean(train_loss):.3f} | train acc: {np.mean(train_acc):.3f} | val loss: {np.mean(val_loss):.3f} | val acc: {np.mean(val_acc):.3f}")
         torch.save(model.state_dict(), os.path.join(logdir, "model_last.pt"))
         if args.use_wandb:
-            wandb.log({"train_loss": np.mean(train_loss), "val_loss": np.mean(val_loss)})
+            wandb.log({"train_loss": np.mean(train_loss), "train_acc": np.mean(train_acc), "val_loss": np.mean(val_loss), "val_acc": np.mean(val_acc)})
         
         if np.mean(val_loss) < min_val_loss:
             cprint("New best.", "cyan")
