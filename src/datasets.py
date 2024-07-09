@@ -1,6 +1,9 @@
 import os
 import numpy as np
 import torch
+from torch.utils.data import Sampler
+import random
+from collections import defaultdict
 from typing import Tuple
 from termcolor import cprint
 from PIL import Image
@@ -146,3 +149,53 @@ class ImageMEGDataset(torch.utils.data.Dataset):
     @property
     def seq_len(self) -> int:
         return self.meg.shape[2]
+
+class RandomClassBatchSampler(Sampler):
+    def __init__(self, dataset, batch_size):
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self.y = dataset.y  # assuming dataset has a 'targets' attribute for labels
+        
+        # クラスごとにインデックスをまとめる
+        self.class_indices = defaultdict(list)
+        for idx, label in enumerate(self.y):
+            self.class_indices[label.item()].append(idx)
+
+    def __iter__(self):
+        # クラスごとのインデックスリストをシャッフル
+        for label in self.class_indices:
+            random.shuffle(self.class_indices[label])
+            
+        unique_labels = list(self.class_indices.keys())
+        random.shuffle(unique_labels)
+        
+        batches = []
+        
+        while len(unique_labels) >= self.batch_size:
+            selected_labels = random.sample(unique_labels, self.batch_size)
+            batch = []
+            
+            for label in selected_labels:
+                if self.class_indices[label]:
+                    batch.append(self.class_indices[label].pop(0))
+                    # インデックスを使い切ったらそのラベルをリストから削除
+                    if not self.class_indices[label]:
+                        unique_labels.remove(label)
+
+            if len(batch) == self.batch_size:
+                batches.append(batch)
+
+        return iter(batches)
+
+    def __len__(self):
+        return len(self.dataset) // self.batch_size
+
+
+class ImageClassDataset(torch.utils.data.Dataset):
+    def __init__(self, split: str, data_dir: str = "data", transform = None) -> None:
+        super().__init__()
+        
+        assert split in ["train", "val"], f"Invalid split: {split}"
+        self.split = split
+        self.num_classes = 1854
+        self.transform = transform
