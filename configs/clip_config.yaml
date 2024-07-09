@@ -2,6 +2,9 @@ batch_size: 128
 epochs: 40
 lr: 0.001
 
+image_encoder: efficientnet_v2_s
+image_weight_path: outputs/20-51-06/model_best.pt
+
 device: cuda:0
 num_workers: 4
 seed: 1234

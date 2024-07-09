@@ -12,8 +12,8 @@ from termcolor import cprint
 from tqdm import tqdm
 from topk.svm import SmoothTopkSVM
 
-from src.datasets import ImageDataset
-from src.models import BasicConvClassifier, ConvRNNClassifier, BasicLSTMClassifier
+from src.datasets import ImageMEGDataset
+from src.models import CLIPModel, CLIPLoss
 from src.utils import set_seed
 from src.conformer import Conformer
 from src.utils import MEGEncoder
@@ -21,7 +21,7 @@ from src.utils import MEGEncoder
 os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'  # すべてのGPUを指定
 
-@hydra.main(version_base=None, config_path="configs", config_name="image_config")
+@hydra.main(version_base=None, config_path="configs", config_name="clip_config")
 def run(args: DictConfig):
     set_seed(args.seed)
     logdir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
@@ -44,34 +44,26 @@ def run(args: DictConfig):
     # ------------------
     loader_args = {"batch_size": args.batch_size, "num_workers": args.num_workers}
     
-    train_set = ImageDataset("train", args.data_dir, transform=transform)
-    train_loader = torch.utils.data.DataLoader(train_set, shuffle=True, **loader_args)
-    val_set = ImageDataset("val", args.data_dir, transform=transform)
-    val_loader = torch.utils.data.DataLoader(val_set, shuffle=False, **loader_args)
+    print("======= data loading =======")
+    train_set = ImageMEGDataset("train", args.data_dir, transform=transform)
+    train_loader = torch.utils.data.DataLoader(train_set, shuffle=True, pin_memory=True, **loader_args)
+    val_set = ImageMEGDataset("val", args.data_dir, transform=transform)
+    val_loader = torch.utils.data.DataLoader(val_set, shuffle=False, pin_memory=True, **loader_args)
     
+    position_list = torch.load("/root/data/position_list.pt").to(args.device)
+    
+    print("======= data loading done =======")
     # ------------------
     #       Model
     # ------------------
-    # 学習済みモデルの読み込み
-    # Resnet50を重み付きで読み込む
-    if args.model == "resnet50":
-        model_ft = models.resnet50(pretrained=True)
-        # 最終ノードの出力を変更する
-        model_ft.fc = nn.Linear(model_ft.fc.in_features, train_set.num_classes)
-        net = model_ft.to(args.device)
-    elif args.model == "resnet18":
-        model_ft = models.resnet18(pretrained=True)
-        # 最終ノードの出力を変更する
-        model_ft.fc = nn.Linear(model_ft.fc.in_features, train_set.num_classes)
-        net = model_ft.to(args.device)
-    elif args.model == "efficientnet_v2_s":
-        model_ft = models.efficientnet_v2_s(weights=models.EfficientNet_V2_S_Weights.DEFAULT)
-        # 最終ノードの出力を変更する
-        model_ft.classifier[1] = nn.Linear(model_ft.classifier[1].in_features, train_set.num_classes)
-        net = model_ft.to(args.device)
+    
+    model = CLIPModel(
+        position_list=position_list,
+        im_weight_path=args.image_weight_path,
+        image_encoder=args.image_encoder,
+        num_classes=train_set.num_classes
+    ).to(args.device)
 
-    
-    
     # ------------------
     #     Optimizer
     # ------------------
@@ -80,51 +72,45 @@ def run(args: DictConfig):
     # ------------------
     #   Start training
     # ------------------  
-    max_val_acc = 0
-    accuracy = Accuracy(
-        task="multiclass", num_classes=train_set.num_classes
-    ).to(args.device)
     
-    loss_fn = F.cross_entropy
+    loss_fn = CLIPLoss()
+    
+    min_val_loss = float("inf")
     
     for epoch in range(args.epochs):
         print(f"Epoch {epoch+1}/{args.epochs}")
         
-        train_loss, train_acc, val_loss, val_acc = [], [], [], []
+        train_loss, val_loss = [], []
         
-        net.train()
-        for X, y in tqdm(train_loader, desc="Train"):
-            X, y = X.to(args.device), y.to(args.device)
-            y_pred = net(X)
+        model.train()
+        for image, meg, subject_idxs, y in tqdm(train_loader, desc="Train"):
+            image, meg, subject_idxs, y = image.to(args.device), meg.to(args.device), subject_idxs.to(args.device), y.to(args.device)
+            encoded_image, encoded_meg = model(image, meg, subject_idxs)
             
-            loss = loss_fn(y_pred, y)
+            loss = loss_fn(encoded_image, encoded_megs)
             train_loss.append(loss.item())
             
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            
-            acc = accuracy(y_pred, y)
-            train_acc.append(acc.item())
 
-        net.eval()
-        for X, y in tqdm(val_loader, desc="Validation"):
-            X, y = X.to(args.device), y.to(args.device)
+        model.eval()
+        for image, meg, subject_idxs, y in tqdm(val_loader, desc="Validation"):
+            image, meg, subject_idxs, y = image.to(args.device), meg.to(args.device), subject_idxs.to(args.device), y.to(args.device)
             with torch.no_grad():
-                y_pred = net(X)
+                encoded_image, encoded_meg = model(image, meg, subject_idxs)
             
-            val_loss.append(loss_fn(y_pred, y).item())
-            val_acc.append(accuracy(y_pred, y).item())
+            val_loss.append(loss_fn(encoded_image, encoded_meg).item())
 
-        print(f"Epoch {epoch+1}/{args.epochs} | train loss: {np.mean(train_loss):.3f} | train acc: {np.mean(train_acc):.3f} | val loss: {np.mean(val_loss):.3f} | val acc: {np.mean(val_acc):.3f}")
+        print(f"Epoch {epoch+1}/{args.epochs} | train loss: {np.mean(train_loss):.3f} | val loss: {np.mean(val_loss):.3f}")
         torch.save(net.state_dict(), os.path.join(logdir, "model_last.pt"))
         if args.use_wandb:
-            wandb.log({"train_loss": np.mean(train_loss), "train_acc": np.mean(train_acc), "val_loss": np.mean(val_loss), "val_acc": np.mean(val_acc)})
+            wandb.log({"train_loss": np.mean(train_loss), "val_loss": np.mean(val_loss)})
         
-        if np.mean(val_acc) > max_val_acc:
+        if np.mean(val_loss) < min_val_loss:
             cprint("New best.", "cyan")
             torch.save(net.state_dict(), os.path.join(logdir, "model_best.pt"))
-            max_val_acc = np.mean(val_acc)
+            min_val_loss = np.mean(val_loss)
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ from einops.layers.torch import Rearrange
 from torchvision import models
 
 from .utils import MEGEncoder
+from typing import List
 
 
 class BasicConvClassifier(nn.Module):
@@ -158,20 +159,29 @@ class BasicLSTMClassifier(nn.Module):
 class CLIPModel(nn.Module):
     def __init__(
         self,
-        postion_list: List[int],
+        position_list: List[int],
         im_weight_path: str,
         image_encoder: str,
+        num_classes: int
     ) -> None:
         super().__init__()
-        self.temperature = temperature
         if image_encoder == "resnet50":
             self.ImageEncoder = models.resnet50(weights=im_weight_path)
+            self.ImageEncoder.fc = nn.Linear(self.ImageEncoder.fc.in_features, num_classes)
+            self.ImageEncoder.load_state_dict(torch.load(im_weight_path))
+            self.ImageEncoder.fc = nn.Identity()
             self.meg_encoder = MEGEncoder(position_list, out_channels=2048)
         elif image_encoder == "efficientnet_v2_s":
             self.ImageEncoder = models.efficientnet_v2_s(weights=im_weight_path)
+            self.ImageEncoder.classifier[1] = nn.Linear(self.ImageEncoder.classifier[1].in_features, num_classes)
+            self.ImageEncoder.load_state_dict(torch.load(im_weight_path))
+            self.ImageEncoder.classifier = nn.Identity()
             self.meg_encoder = MEGEncoder(position_list, out_channels=1280)
         else:
             raise ValueError(f"Unsupported image encoder: {image_encoder}")
+        
+        for param in self.ImageEncoder.parameters():
+            param.requires_grad = False
 
     def forward(self, image: torch.Tensor, meg: torch.Tensor, subject: torch.Tensor) -> torch.Tensor:
         encoded_image = self.ImageEncoder(image)
