@@ -44,7 +44,7 @@ def run(args: DictConfig):
     # ------------------
     loader_args = {"batch_size": args.batch_size, "num_workers": args.num_workers}
     
-    print("======= data loading =======")
+    print("* data loading")
     train_set = ImageMEGDataset("train", args.data_dir, transform=transform)
     train_loader = torch.utils.data.DataLoader(train_set, shuffle=True, pin_memory=True, **loader_args)
     val_set = ImageMEGDataset("val", args.data_dir, transform=transform)
@@ -52,7 +52,7 @@ def run(args: DictConfig):
     
     position_list = torch.load("/root/data/position_list.pt").to(args.device)
     
-    print("======= data loading done =======")
+    print("* data loading done")
     # ------------------
     #       Model
     # ------------------
@@ -67,13 +67,13 @@ def run(args: DictConfig):
     # ------------------
     #     Optimizer
     # ------------------
-    optimizer = torch.optim.Adam(net.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     # ------------------
     #   Start training
     # ------------------  
     
-    loss_fn = CLIPLoss()
+    loss_fn = CLIPLoss().to(args.device)
     
     min_val_loss = float("inf")
     
@@ -87,7 +87,7 @@ def run(args: DictConfig):
             image, meg, subject_idxs, y = image.to(args.device), meg.to(args.device), subject_idxs.to(args.device), y.to(args.device)
             encoded_image, encoded_meg = model(image, meg, subject_idxs)
             
-            loss = loss_fn(encoded_image, encoded_megs)
+            loss = loss_fn(encoded_image, encoded_meg)
             train_loss.append(loss.item())
             
             optimizer.zero_grad()
@@ -103,13 +103,13 @@ def run(args: DictConfig):
             val_loss.append(loss_fn(encoded_image, encoded_meg).item())
 
         print(f"Epoch {epoch+1}/{args.epochs} | train loss: {np.mean(train_loss):.3f} | val loss: {np.mean(val_loss):.3f}")
-        torch.save(net.state_dict(), os.path.join(logdir, "model_last.pt"))
+        torch.save(model.state_dict(), os.path.join(logdir, "model_last.pt"))
         if args.use_wandb:
             wandb.log({"train_loss": np.mean(train_loss), "val_loss": np.mean(val_loss)})
         
         if np.mean(val_loss) < min_val_loss:
             cprint("New best.", "cyan")
-            torch.save(net.state_dict(), os.path.join(logdir, "model_best.pt"))
+            torch.save(model.state_dict(), os.path.join(logdir, "model_best.pt"))
             min_val_loss = np.mean(val_loss)
 
 

@@ -148,7 +148,7 @@ class ResidualDilatedConvBlock(nn.Module):
             ))
         self.final_conv1 = nn.Conv1d(D2, linear_dim, kernel_size=1)
         self.affine_projection = nn.Conv1d(281, 1, kernel_size=1)  # Affine projection layer
-        self.final_linear = nn.Linear(linear_dim, 1854)
+        self.final_linear = nn.Linear(linear_dim, out_channels)
         # self.final_gelu = nn.GELU()
         # self.final_conv2 = nn.Conv1d(linear_dim, out_channels, kernel_size=1)
 

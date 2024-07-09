@@ -124,6 +124,10 @@ class ImageMEGDataset(torch.utils.data.Dataset):
             self.image = Image.open(f"/root/data/Images/{self.image_paths[i]}")
             self.image = self.transform(self.image)
             return self.image, self.meg[i], self.subject_idxs[i], self.y[i]
+        # ラベルを用意してそこからサンプリングする形にすれば良くね
+        # class0:{index: [subject_idx, y, meg, image], ...}
+        # class1:{index: [subject_idx, y, meg, image], ...}
+        # ...
         
     @property
     def height(self) -> int:

@@ -166,13 +166,13 @@ class CLIPModel(nn.Module):
     ) -> None:
         super().__init__()
         if image_encoder == "resnet50":
-            self.ImageEncoder = models.resnet50(weights=im_weight_path)
+            self.ImageEncoder = models.resnet50()
             self.ImageEncoder.fc = nn.Linear(self.ImageEncoder.fc.in_features, num_classes)
             self.ImageEncoder.load_state_dict(torch.load(im_weight_path))
             self.ImageEncoder.fc = nn.Identity()
             self.meg_encoder = MEGEncoder(position_list, out_channels=2048)
         elif image_encoder == "efficientnet_v2_s":
-            self.ImageEncoder = models.efficientnet_v2_s(weights=im_weight_path)
+            self.ImageEncoder = models.efficientnet_v2_s()
             self.ImageEncoder.classifier[1] = nn.Linear(self.ImageEncoder.classifier[1].in_features, num_classes)
             self.ImageEncoder.load_state_dict(torch.load(im_weight_path))
             self.ImageEncoder.classifier = nn.Identity()
@@ -192,7 +192,7 @@ class CLIPModel(nn.Module):
 class CLIPLoss(nn.Module):
     def __init__(self, temperature=1) -> None:
         super().__init__()
-        self.temperature = temperature
+        self.temperature = torch.tensor(temperature)
 
     def forward(self, encoded_image: torch.Tensor, encoded_meg: torch.Tensor) -> torch.Tensor:
         # Normalize the embeddings
@@ -203,8 +203,9 @@ class CLIPLoss(nn.Module):
 
         # symmetric loss function
         labels = torch.arange(encoded_image.size(0))
-        loss_i = F.cross_entropy(logits, labels, axis=0)
-        loss_t = F.cross_entropy(logits, labels, axis=1)
+        labels = labels.to(logits.device)
+        loss_i = F.cross_entropy(logits.transpose(0, 1), labels)
+        loss_t = F.cross_entropy(logits, labels)
         loss = (loss_i + loss_t)/2
         
         return loss

@@ -31,10 +31,12 @@ def run(args: DictConfig):
     # ------------------
     #       Model
     # ------------------
-    model = BasicConvClassifier(
-        test_set.num_classes, test_set.seq_len, test_set.num_channels
-    ).to(args.device)
-    model.load_state_dict(torch.load(args.model_path, map_location=args.device))
+    # model = BasicConvClassifier(
+    #     test_set.num_classes, test_set.seq_len, test_set.num_channels
+    # ).to(args.device)
+    # model.load_state_dict(torch.load(args.model_path, map_location=args.device))
+    
+    model = CLIPModel.from_pretrained(args.model_path)
 
     # ------------------
     #  Start evaluation
