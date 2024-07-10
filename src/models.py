@@ -183,8 +183,6 @@ class CLIPModel(nn.Module):
         
         for param in self.ImageEncoder.parameters():
             param.requires_grad = False
-        for param in self.final_layer.parameters():
-            param.requires_grad = False
 
     def forward(self, image: torch.Tensor, meg: torch.Tensor, subject: torch.Tensor) -> torch.Tensor:
         encoded_image = self.ImageEncoder(image)
@@ -231,3 +229,15 @@ class CLIPLoss(nn.Module):
 
 def torch_log(x: torch.Tensor) -> torch.Tensor:
     return torch.log(torch.clamp(x, min=1e-10))
+
+class ClassifierModel(nn.Module):
+    def __init__(self, clip_model: CLIPModel) -> None:
+        super().__init__()
+        self.clip_model = clip_model
+        self.meg_encoder = clip_model.meg_encoder
+        self.classifier = clip_model.final_layer
+        self.classifier.out_features = 1854
+        
+    def forward(self, X: torch.Tensor, subject: torch.Tensor) -> torch.Tensor:
+        encoded_meg = self.meg_encoder(X, subject)
+        return self.classifier(encoded_meg)

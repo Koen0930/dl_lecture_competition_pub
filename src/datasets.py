@@ -150,7 +150,7 @@ class ImageMEGDataset(torch.utils.data.Dataset):
     def seq_len(self) -> int:
         return self.meg.shape[2]
 
-class RandomClassBatchSampler(Sampler):
+class BalancedClassBatchSampler(Sampler):
     def __init__(self, dataset, batch_size):
         self.dataset = dataset
         self.batch_size = batch_size

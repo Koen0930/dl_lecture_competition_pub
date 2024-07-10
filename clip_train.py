@@ -12,7 +12,7 @@ from termcolor import cprint
 from tqdm import tqdm
 from topk.svm import SmoothTopkSVM
 
-from src.datasets import ImageMEGDataset, RandomClassBatchSampler
+from src.datasets import ImageMEGDataset, BalancedClassBatchSampler
 from src.models import CLIPModel, CLIPLoss
 from src.utils import set_seed
 from src.conformer import Conformer
@@ -27,7 +27,7 @@ def run(args: DictConfig):
     logdir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
     
     if args.use_wandb:
-        wandb.init(mode="online", dir=logdir, project="Image-classification")
+        wandb.init(mode="online", dir=logdir, project="CLIP")
     
     # ------------------
     #       Transform
@@ -48,11 +48,15 @@ def run(args: DictConfig):
     train_set = ImageMEGDataset("train", args.data_dir, transform=transform)
     val_set = ImageMEGDataset("val", args.data_dir, transform=transform)
     
-    train_sampler = RandomClassBatchSampler(train_set, args.batch_size)
-    val_sampler = RandomClassBatchSampler(val_set, args.batch_size)
-    
-    train_loader = torch.utils.data.DataLoader(train_set, batch_sampler=train_sampler, **loader_args)
-    val_loader = torch.utils.data.DataLoader(val_set, batch_sampler=val_sampler, **loader_args)
+    if args.balanced_sampling:
+        train_sampler = BalancedClassBatchSampler(train_set, args.batch_size)
+        val_sampler = BalancedClassBatchSampler(val_set, args.batch_size)
+        
+        train_loader = torch.utils.data.DataLoader(train_set, batch_sampler=train_sampler, **loader_args)
+        val_loader = torch.utils.data.DataLoader(val_set, batch_sampler=val_sampler, **loader_args)
+    else:
+        train_loader = torch.utils.data.DataLoader(train_set, shuffle=True, **loader_args)
+        val_loader = torch.utils.data.DataLoader(val_set, shuffle=False, **loader_args)
     
     position_list = torch.load("/root/data/position_list.pt").to(args.device)
     
@@ -67,6 +71,8 @@ def run(args: DictConfig):
         image_encoder=args.image_encoder,
         num_classes=train_set.num_classes
     ).to(args.device)
+    
+    model.load_state_dict(torch.load("/root/outputs/2024-07-09/14-58-30/model_best.pt"))
 
     # ------------------
     #     Optimizer
