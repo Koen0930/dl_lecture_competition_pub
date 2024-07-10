@@ -183,6 +183,8 @@ class CLIPModel(nn.Module):
         
         for param in self.ImageEncoder.parameters():
             param.requires_grad = False
+        for param in self.final_layer.parameters():
+            param.requires_grad = False
 
     def forward(self, image: torch.Tensor, meg: torch.Tensor, subject: torch.Tensor) -> torch.Tensor:
         encoded_image = self.ImageEncoder(image)

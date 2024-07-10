@@ -52,8 +52,8 @@ def run(args: DictConfig):
         train_sampler = BalancedClassBatchSampler(train_set, args.batch_size)
         val_sampler = BalancedClassBatchSampler(val_set, args.batch_size)
         
-        train_loader = torch.utils.data.DataLoader(train_set, batch_sampler=train_sampler, **loader_args)
-        val_loader = torch.utils.data.DataLoader(val_set, batch_sampler=val_sampler, **loader_args)
+        train_loader = torch.utils.data.DataLoader(train_set, batch_sampler=train_sampler, num_workers=args.num_workers, pin_memory=True)
+        val_loader = torch.utils.data.DataLoader(val_set, batch_sampler=val_sampler, num_workers=args.num_workers, pin_memory=True)
     else:
         train_loader = torch.utils.data.DataLoader(train_set, shuffle=True, **loader_args)
         val_loader = torch.utils.data.DataLoader(val_set, shuffle=False, **loader_args)
@@ -72,7 +72,7 @@ def run(args: DictConfig):
         num_classes=train_set.num_classes
     ).to(args.device)
     
-    model.load_state_dict(torch.load("/root/outputs/2024-07-09/14-58-30/model_best.pt"))
+    # model.load_state_dict(torch.load("/root/outputs/2024-07-09/14-58-30/model_best.pt"))
 
     # ------------------
     #     Optimizer
