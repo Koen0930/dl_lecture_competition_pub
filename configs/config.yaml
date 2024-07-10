@@ -1,0 +1,21 @@
+batch_size: 128
+epochs: 10
+lr: 0.001
+
+loss: topk 
+#loss: ce
+
+# model: CRNN
+model: BasicConv
+# model: LSTM
+# model: Conformer
+
+device: cuda:0
+num_workers: 4
+seed: 1234
+use_wandb: False
+
+data_dir: data
+
+# Evaluation
+model_path: 

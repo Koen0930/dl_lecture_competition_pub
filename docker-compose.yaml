@@ -1,0 +1,10 @@
+services:
+  dl_basic_final:
+    image: dl_basic_final
+    build:
+      context: .
+      dockerfile: Dockerfile
+    shm_size: '2g'
+    tty: true
+    volumes:
+      - ./:/root/
