@@ -1,0 +1,18 @@
+batch_size: 256
+epochs: 40
+lr: 0.001
+
+image_encoder: efficientnet_v2_s
+image_weight_path: /root/outputs/2024-07-08/20-51-06/model_best.pt
+
+device: cuda:0
+num_workers: 8
+seed: 1234
+use_wandb: True
+
+balanced_sampling: True
+
+data_dir: data
+
+# Evaluation
+model_path: 

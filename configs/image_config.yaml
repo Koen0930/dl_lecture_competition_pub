@@ -1,0 +1,15 @@
+batch_size: 128
+epochs: 40
+lr: 0.001
+
+model: efficientnet_v2_s
+
+device: cuda:0
+num_workers: 4
+seed: 1234
+use_wandb: False
+
+data_dir: data
+
+# Evaluation
+model_path: 

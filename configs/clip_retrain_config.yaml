@@ -2,15 +2,11 @@ batch_size: 128
 epochs: 40
 lr: 0.001
 
+image_encoder: efficientnet_v2_s
+image_weight_path: /root/outputs/2024-07-08/20-51-06/model_best.pt
+
 loss: topk 
-#loss: ce
-
-# model: CRNN
-model: BasicConv
-# model: LSTM
-# model: Conformer
-
-balanced_sampling: True
+# loss: ce
 
 device: cuda:0
 num_workers: 4

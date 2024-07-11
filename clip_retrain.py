@@ -9,9 +9,10 @@ import wandb
 from termcolor import cprint
 from tqdm import tqdm
 from topk.svm import SmoothTopkSVM
+import torch.nn as nn
 
 from src.datasets import ThingsMEGDataset
-from src.models import BasicConvClassifier, ConvRNNClassifier, BasicLSTMClassifier
+from src.models import CLIPModel, ClassifierModel
 from src.utils import set_seed
 from src.conformer import Conformer
 from src.utils import MEGEncoder
@@ -19,13 +20,13 @@ from src.utils import MEGEncoder
 os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2'  # すべてのGPUを指定
 
-@hydra.main(version_base=None, config_path="configs", config_name="config")
+@hydra.main(version_base=None, config_path="configs", config_name="clip_retrain_config")
 def run(args: DictConfig):
     set_seed(args.seed)
     logdir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
     
     if args.use_wandb:
-        wandb.init(mode="online", dir=logdir, project="MEG-classification")
+        wandb.init(mode="online", dir=logdir, project="CLIP-retrain")
 
     # ------------------
     #    Dataloader
@@ -40,30 +41,28 @@ def run(args: DictConfig):
     test_loader = torch.utils.data.DataLoader(
         test_set, shuffle=False, batch_size=args.batch_size, num_workers=args.num_workers
     )
-
+    position_list = torch.load("/root/data/position_list.pt").to(args.device)
     # ------------------
     #       Model
     # ------------------
     
-    if args.model == "ConvRNN":
-        model = ConvRNNClassifier(
-            train_set.num_classes, train_set.seq_len, train_set.num_channels
-        ).to(args.device)
-    elif args.model == "BasicConv":
-        model = BasicConvClassifier(
-            train_set.num_classes, train_set.seq_len, train_set.num_channels
-        ).to(args.device)
-    elif args.model == "LSTM":
-        model = BasicLSTMClassifier(
-            train_set.num_classes, train_set.seq_len, train_set.num_channels
-        ).to(args.device)
-    elif args.model == "Conformer":
-        model = Conformer(n_classes=train_set.num_classes)
-
+    model = CLIPModel(
+        position_list=position_list,
+        im_weight_path=args.image_weight_path,
+        image_encoder=args.image_encoder,
+        num_classes=train_set.num_classes
+    ).to(args.device)
+    
+    model.load_state_dict(torch.load("/root/outputs/2024-07-09/19-34-54/model_best.pt"))
+    
+    classifier = ClassifierModel(model).to(args.device)
+    for name, param in list(classifier.named_parameters())[:-2]:
+        param.requires_grad = False
+            
     # ------------------
     #     Optimizer
     # ------------------
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adam(classifier.parameters(), lr=args.lr)
 
     # ------------------
     #   Start training
@@ -80,22 +79,17 @@ def run(args: DictConfig):
         loss_fn = F.cross_entropy
     else:
         raise ValueError(f"Loss {args.loss} not supported")
-
-    position_list = torch.load("/root/data/position_list.pt").to(args.device)
     
     for epoch in range(args.epochs):
         print(f"Epoch {epoch+1}/{args.epochs}")
         
         train_loss, train_acc, val_loss, val_acc = [], [], [], []
         
-        model.train()
+        classifier.train()
         for X, y, subject in tqdm(train_loader, desc="Train"):
-            X, y = X.to(args.device), y.to(args.device)
-            if args.model == "Conformer":
-                X = X.unsqueeze(1)
-                _, y_pred = model(X)
-            else:
-                y_pred = model(X, subject)
+            X, y, subject = X.to(args.device), y.to(args.device), subject.to(args.device)
+            
+            y_pred = classifier(X, subject)
             
             loss = loss_fn(y_pred, y)
             train_loss.append(loss.item())
@@ -107,40 +101,35 @@ def run(args: DictConfig):
             acc = accuracy(y_pred, y)
             train_acc.append(acc.item())
 
-        model.eval()
+        classifier.eval()
         for X, y, subject in tqdm(val_loader, desc="Validation"):
-            X, y = X.to(args.device), y.to(args.device)
-            if args.model == "Conformer":
-                X = X.unsqueeze(1)
-                with torch.no_grad():
-                    _, y_pred = model(X)
-            else:
-                with torch.no_grad():
-                    y_pred = model(X, subject)
+            X, y, subject = X.to(args.device), y.to(args.device), subject.to(args.device)
+            with torch.no_grad():
+                y_pred = classifier(X, subject)
             
             val_loss.append(loss_fn(y_pred, y).item())
             val_acc.append(accuracy(y_pred, y).item())
 
         print(f"Epoch {epoch+1}/{args.epochs} | train loss: {np.mean(train_loss):.3f} | train acc: {np.mean(train_acc):.3f} | val loss: {np.mean(val_loss):.3f} | val acc: {np.mean(val_acc):.3f}")
-        torch.save(model.state_dict(), os.path.join(logdir, "model_last.pt"))
+        torch.save(classifier.state_dict(), os.path.join(logdir, "model_last.pt"))
         if args.use_wandb:
             wandb.log({"train_loss": np.mean(train_loss), "train_acc": np.mean(train_acc), "val_loss": np.mean(val_loss), "val_acc": np.mean(val_acc)})
         
         if np.mean(val_acc) > max_val_acc:
             cprint("New best.", "cyan")
-            torch.save(model.state_dict(), os.path.join(logdir, "model_best.pt"))
+            torch.save(classifier.state_dict(), os.path.join(logdir, "model_best.pt"))
             max_val_acc = np.mean(val_acc)
             
     
     # ----------------------------------
     #  Start evaluation with best model
     # ----------------------------------
-    model.load_state_dict(torch.load(os.path.join(logdir, "model_best.pt"), map_location=args.device))
+    classifier.load_state_dict(torch.load(os.path.join(logdir, "model_best.pt"), map_location=args.device))
 
     preds = [] 
-    model.eval()
+    classifier.eval()
     for X, subject in tqdm(test_loader, desc="Validation"):        
-        preds.append(model(X.to(args.device)).detach().cpu())
+        preds.append(classifier(X.to(args.device)).detach().cpu())
         
     preds = torch.cat(preds, dim=0).numpy()
     np.save(os.path.join(logdir, "submission"), preds)
