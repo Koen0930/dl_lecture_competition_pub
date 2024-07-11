@@ -16,7 +16,7 @@ from src.datasets import ImageDataset
 def run():
     set_seed(42)
     save_dir = "data"
-    device = "cpu"
+    device = "cuda:0"
     # ------------------
     #       Transform
     # ------------------
@@ -30,7 +30,7 @@ def run():
     #    Dataloader
     # ------------------
     print("* data loading")
-    loader_args = {"batch_size": 1, "num_workers": 4, "pin_memory": False, "shuffle": False}
+    loader_args = {"batch_size": 1, "num_workers": 8, "pin_memory": False, "shuffle": False}
     train_set = ImageDataset("train", "data", transform=transform)
     train_loader = torch.utils.data.DataLoader(train_set, **loader_args)
     val_set = ImageDataset("val", "data", transform=transform)
@@ -50,23 +50,29 @@ def run():
     # ------------------
     #       Embedding
     # ------------------
+    # Embeddingsリストを初期化
     embeddings_list = []
-    # for X, y in tqdm(train_loader, desc="Train"):
-    #     X, y = X.to(device), y.to(device)
-    #     embeddings = model(X)
-    #     embeddings = embeddings.cpu()
-    #     embeddings_list.append(embeddings)
-    #     # 使い終わったXとyをGPUから外す
-    #     del X, y
-    #     torch.cuda.empty_cache()  # 未使用のメモリを解放
-        
-    for X, y in tqdm(val_loader, desc="Val"):
-        X, y = X.to(device), y.to(device)
-        embeddings = model(X)
-        embeddings = embeddings.cpu()
+
+    # ラベルごとにデータを分類
+    label_to_data = {}
+    for X, y in tqdm(train_loader):
+        label = y.item()
+        if label not in label_to_data:
+            label_to_data[label] = []
+        label_to_data[label].append(X)
+    print(len(label_to_data))
+
+    # 各ラベルごとに処理
+    for label in range(1854):
+        X = torch.stack(label_to_data[label])
+        embeddings = model(X.to(device))
+        # 各行の和を計算
+        embeddings = embeddings.sum(dim=0).to("cpu")
         embeddings_list.append(embeddings)
-    embeddings = torch.cat(embeddings_list, dim=0)
-    torch.save(embeddings, os.path.join(save_dir, "image_embeddings.pt"))
+        
+        
+    embeddings_list = torch.cat(embeddings_list, dim=0)
+    torch.save(embeddings_list, os.path.join(save_dir, "train_image_embeddings.pt"))
     
 if __name__ == "__main__":
     run()

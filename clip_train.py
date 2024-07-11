@@ -31,6 +31,22 @@ def run(args: DictConfig):
     # ------------------
     #       Transform
     # ------------------
+    train_transform = transforms.Compose([
+        transforms.RandomResizedCrop(224, scale=(0.8, 1.0)),  # ランダムリサイズクロップ
+        transforms.RandomHorizontalFlip(),  # ランダム水平反転
+        transforms.RandomRotation(10),  # ランダム回転
+        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),  # カラージッター
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+
+    val_transform = transforms.Compose([
+        transforms.Resize(224),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+    
     transform = transforms.Compose([
         transforms.Resize(224),
         transforms.CenterCrop(224),
@@ -68,15 +84,15 @@ def run(args: DictConfig):
         position_list=position_list,
         im_weight_path=args.image_weight_path,
         image_encoder=args.image_encoder,
+        meg_encoder=args.meg_encoder,
         num_classes=train_set.num_classes
     ).to(args.device)
     
-    # model.load_state_dict(torch.load("/root/outputs/2024-07-09/14-58-30/model_best.pt"))
 
     # ------------------
     #     Optimizer
     # ------------------
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
     # ------------------
     #   Start training
@@ -86,7 +102,14 @@ def run(args: DictConfig):
     ).to(args.device)
     loss_fn = CLIPLoss().to(args.device)
     
-    min_val_loss = float("inf")
+    if args.loss == "topk":
+        loss_fn2 = SmoothTopkSVM(n_classes=train_set.num_classes, alpha=None,
+                                tau=1.0, k=10).cuda(args.device)
+    elif args.loss == "ce":
+        loss_fn2 = F.cross_entropy
+    
+    loss_weight = args.loss_weight
+    min_val_acc = -float("inf")
     
     for epoch in range(args.epochs):
         print(f"Epoch {epoch+1}/{args.epochs}")
@@ -98,8 +121,12 @@ def run(args: DictConfig):
             image, meg, subject_idxs, y = image.to(args.device), meg.to(args.device), subject_idxs.to(args.device), y.to(args.device)
             encoded_image, encoded_meg = model(image, meg, subject_idxs)
             
-            loss = loss_fn(encoded_image, encoded_meg, y)
             y_pred = model.final_layer(encoded_meg)
+            
+            # lossの計算
+            clip_loss = loss_fn(encoded_image, encoded_meg, y)
+            pred_loss = loss_fn2(y_pred, y)
+            loss = loss_weight * clip_loss + (1 - loss_weight) * pred_loss
             train_loss.append(loss.item())
             
             optimizer.zero_grad()
@@ -114,21 +141,27 @@ def run(args: DictConfig):
             image, meg, subject_idxs, y = image.to(args.device), meg.to(args.device), subject_idxs.to(args.device), y.to(args.device)
             with torch.no_grad():
                 encoded_image, encoded_meg = model(image, meg, subject_idxs)
+                
                 y_pred = model.final_layer(encoded_meg)
+                # lossの計算
+                clip_loss = loss_fn(encoded_image, encoded_meg, y)
+                pred_loss = loss_fn2(y_pred, y)
+                loss = loss_weight * clip_loss + (1 - loss_weight) * pred_loss
+                
                 acc = accuracy(y_pred, y)
                 val_acc.append(acc.item())
             
-            val_loss.append(loss_fn(encoded_image, encoded_meg, y).item())
+            val_loss.append(loss.item())
 
         print(f"Epoch {epoch+1}/{args.epochs} | train loss: {np.mean(train_loss):.3f} | train acc: {np.mean(train_acc):.3f} | val loss: {np.mean(val_loss):.3f} | val acc: {np.mean(val_acc):.3f}")
         torch.save(model.state_dict(), os.path.join(logdir, "model_last.pt"))
         if args.use_wandb:
             wandb.log({"train_loss": np.mean(train_loss), "train_acc": np.mean(train_acc), "val_loss": np.mean(val_loss), "val_acc": np.mean(val_acc)})
         
-        if np.mean(val_loss) < min_val_loss:
+        if np.mean(val_acc) > min_val_acc:
             cprint("New best.", "cyan")
             torch.save(model.state_dict(), os.path.join(logdir, "model_best.pt"))
-            min_val_loss = np.mean(val_loss)
+            min_val_acc = np.mean(val_acc)
 
 
 if __name__ == "__main__":

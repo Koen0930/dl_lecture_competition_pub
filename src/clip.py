@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from einops.layers.torch import Rearrange
 from torchvision import models
 
-from .model import MEGEncoder
+from .model import MEGEncoder, Enc_eeg
 from typing import List
 
 
@@ -14,29 +14,35 @@ class CLIPModel(nn.Module):
         position_list: List[int],
         im_weight_path: str,
         image_encoder: str,
+        meg_encoder: str,
         num_classes: int
     ) -> None:
         super().__init__()
         if image_encoder == "resnet50":
+            self.emb_dim = 2048
             self.ImageEncoder = models.resnet50()
             self.ImageEncoder.fc = nn.Linear(self.ImageEncoder.fc.in_features, num_classes)
             self.ImageEncoder.load_state_dict(torch.load(im_weight_path))
             self.ImageEncoder.fc = nn.Identity()
-            self.meg_encoder = MEGEncoder(position_list, out_channels=2048)
         elif image_encoder == "efficientnet_v2_s":
+            self.emb_dim = 1280
             self.ImageEncoder = models.efficientnet_v2_s()
             self.ImageEncoder.classifier[1] = nn.Linear(self.ImageEncoder.classifier[1].in_features, num_classes)
             self.ImageEncoder.load_state_dict(torch.load(im_weight_path))
             self.final_layer = self.ImageEncoder.classifier[1]
             self.ImageEncoder.classifier = nn.Identity()
-            self.meg_encoder = MEGEncoder(position_list, out_channels=1280)
         else:
             raise ValueError(f"Unsupported image encoder: {image_encoder}")
         
+        if meg_encoder == "eeg":
+            self.meg_encoder = Enc_eeg(position_list, out_channels=self.emb_dim)
+            
+        elif meg_encoder == "meg":
+            self.meg_encoder = MEGEncoder(position_list, out_channels=self.emb_dim)
         for param in self.ImageEncoder.parameters():
             param.requires_grad = False
-        for param in self.final_layer.parameters():
-            param.requires_grad = False
+        # for param in self.final_layer.parameters():
+        #     param.requires_grad = False
 
     def forward(self, image: torch.Tensor, meg: torch.Tensor, subject: torch.Tensor) -> torch.Tensor:
         encoded_image = self.ImageEncoder(image)

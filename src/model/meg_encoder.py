@@ -7,7 +7,6 @@ from torchvision import models
 
 from typing import List
 
-
 class BasicConvClassifier(nn.Module):
     def __init__(
         self,
@@ -343,4 +342,174 @@ class MEGEncoder(nn.Module):
         x = self.initial_layer(x)
         x = self.subject_layers(x, subjects)
         x = self.residual_dilated_conv_block(x)
+        return x
+
+
+class PatchEmbedding(nn.Module):
+    def __init__(self, out_channels=2048):
+        super().__init__()
+        # revised from shallownet
+        self.tsconv = nn.Sequential(
+            nn.Conv2d(1, 20, (1, 15), (1, 1)),
+            nn.AvgPool2d((1, 31), (1, 5)),
+            nn.BatchNorm2d(20),
+            nn.ELU(),
+            nn.Conv2d(20, 10, (33, 1), (1, 1)),
+            nn.BatchNorm2d(10),
+            nn.ELU(),
+            nn.Dropout(0.5),
+        )
+
+        self.projection = nn.Sequential(
+            nn.Conv2d(10, 1, (1, 1), stride=(1, 1)),  
+            Rearrange('b e (h) (w) -> b (h w) e'),
+        )
+        self.linear = nn.Linear(9560, out_channels)
+
+    def forward(self, x):
+        # b, _, _, _ = x.shape
+        x = self.tsconv(x)
+        x = self.projection(x)
+        x = x.squeeze(-1)
+        x = self.linear(x)
+        return x
+
+
+class ResidualAdd(nn.Module):
+    def __init__(self, fn):
+        super().__init__()
+        self.fn = fn
+
+    def forward(self, x, **kwargs):
+        res = x
+        x = self.fn(x, **kwargs)
+        x += res
+        return x
+
+
+class FlattenHead(nn.Sequential):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        x = x.contiguous().view(x.size(0), -1)
+        return x
+
+
+class Enc_eeg(nn.Sequential):
+    def __init__(
+        self,
+        positions,
+        n_subjects: int = 4,
+        in_channels: int = 271,
+        out_channels: int = 2048,
+        init_id: bool = False,
+    ):
+        super().__init__()
+        self.initial_layer = InitialLayer(initial_linear=in_channels, initial_depth=1)
+        self.subject_layers = SubjectLayers(in_channels, in_channels, n_subjects, init_id)
+        self.patchembedding = PatchEmbedding(out_channels)
+        
+        self.ga = ResidualAdd(
+            nn.Sequential(
+                EEG_GAT(),
+                nn.Dropout(0.3),
+                )
+        )
+        self.ca = ResidualAdd(
+                nn.Sequential(
+                    nn.LayerNorm(244),
+                    channel_attention(),
+                    nn.Dropout(0.3),
+                )
+        )
+        
+    def forward(self, x, subjects):
+        # x = self.ca(x)
+        x = self.initial_layer(x)
+        x = self.subject_layers(x, subjects)
+        x = x.unsqueeze(dim=1)
+        x = self.patchembedding(x)
+        return x
+
+
+class channel_attention(nn.Module):
+    def __init__(self, sequence_num=281, inter=1):
+        super(channel_attention, self).__init__()
+        self.sequence_num = sequence_num
+        self.inter = inter
+        self.extract_sequence = int(self.sequence_num / self.inter)  # You could choose to do that for less computation
+
+        self.query = nn.Sequential(
+            nn.Linear(sequence_num, sequence_num),
+            nn.LayerNorm(sequence_num), 
+            nn.Dropout(0.3)
+        )
+        self.key = nn.Sequential(
+            nn.Linear(sequence_num, sequence_num),
+            nn.LayerNorm(sequence_num),
+            nn.Dropout(0.3)
+        )
+        self.value = nn.Sequential(
+            nn.Linear(sequence_num, sequence_num),
+            nn.LayerNorm(sequence_num),
+            nn.Dropout(0.3)
+        )
+
+        self.projection = nn.Sequential(
+            nn.Linear(sequence_num, sequence_num),
+            nn.LayerNorm(64),
+            nn.Dropout(0.3),
+        )
+
+        self.drop_out = nn.Dropout(0)
+        self.pooling = nn.AvgPool2d(kernel_size=(1, self.inter), stride=(1, self.inter))
+
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_normal_(m.weight)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0.0)
+
+    def forward(self, x):
+        channel_query = self.query(x)
+        channel_key = self.key(x)
+        channel_value = self.value(x)
+
+        scaling = self.extract_sequence ** (1 / 2)
+
+        channel_atten = torch.bmm(channel_query, torch.transpose(channel_key, 2, 1)) / scaling
+
+        channel_atten_score = F.softmax(channel_atten, dim=-1)
+        channel_atten_score = self.drop_out(channel_atten_score)
+
+        out = torch.bmm(channel_atten_score, channel_value)
+
+        out = self.projection(out)
+        return out
+
+
+from torch_geometric.nn import GATConv
+class EEG_GAT(nn.Module):
+    def __init__(self, in_channels=271, out_channels=271):
+        super(EEG_GAT, self).__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.conv1 = GATConv(in_channels=in_channels, out_channels=out_channels, heads=1)
+        # self.conv2 = GATConv(in_channels=out_channels, out_channels=out_channels, heads=1)
+
+        self.num_channels = 64
+        # Create a list of tuples representing all possible edges between channels
+        self.edge_index_list = torch.Tensor([(i, j) for i in range(self.num_channels) for j in range(self.num_channels) if i != j]).cuda()
+        # Convert the list of tuples to a tensor
+        self.edge_index = torch.tensor(self.edge_index_list, dtype=torch.long).t().contiguous().cuda()
+
+    def forward(self, x):
+
+        batch_size, num_channels, num_features = x.size()
+        x = x.view(batch_size*num_channels, num_features)
+        x = self.conv1(x, self.edge_index)
+        x = x.view(batch_size, num_channels, -1)
+        x = x.unsqueeze(1)
+        
         return x

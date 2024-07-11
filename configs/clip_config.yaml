@@ -1,16 +1,22 @@
-batch_size: 256
+batch_size: 64
 epochs: 40
 lr: 0.001
+weight_decay: 0.001
 
 image_encoder: efficientnet_v2_s
 image_weight_path: /root/outputs/2024-07-08/20-51-06/model_best.pt
 
+meg_encoder: eeg
+
+loss: topk
+loss_weight: 0.5
+
 device: cuda:0
 num_workers: 8
 seed: 1234
-use_wandb: True
+use_wandb: False
 
-balanced_sampling: True
+balanced_sampling: False
 
 data_dir: data
 

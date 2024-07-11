@@ -18,7 +18,7 @@ class ThingsMEGDataset(torch.utils.data.Dataset):
         self.split = split
         self.num_classes = 1854
         
-        self.X = torch.load(os.path.join(data_dir, f"{split}_X.pt"))
+        self.X = torch.load(os.path.join(data_dir, f"preprocessed_{split}_X.pt"))
         self.subject_idxs = torch.load(os.path.join(data_dir, f"{split}_subject_idxs.pt"))
         
         if split in ["train", "val"]:
@@ -88,6 +88,10 @@ class ImageDataset(torch.utils.data.Dataset):
     def width(self) -> int:
         # 画像の幅
         return self.X.shape[3]
+    def remove(self, i):
+        self.y = self.y.tolist()
+        del self.image_paths[i]
+        del self.y[i]
 
 
 class ImageMEGDataset(torch.utils.data.Dataset):
@@ -114,7 +118,7 @@ class ImageMEGDataset(torch.utils.data.Dataset):
         
         self.image_paths = lines
         
-        self.meg = torch.load(os.path.join(data_dir, f"{split}_X.pt"))
+        self.meg = torch.load(os.path.join(data_dir, f"preprocessed_{split}_X.pt"))
         self.subject_idxs = torch.load(os.path.join(data_dir, f"{split}_subject_idxs.pt"))
         
         self.y = torch.load(os.path.join(data_dir, f"{split}_y.pt"))
@@ -180,10 +184,10 @@ class BalancedClassBatchSampler(BatchSampler):
                     if len(iter_class_indices[label])==0:
                         unique_labels.remove(label)
             yield batch
-            if len(unique_labels) < iter_batch_size:
-                iter_batch_size = len(unique_labels)
-            if len(unique_labels) == 0:
-                break
+            # if len(unique_labels) < iter_batch_size:
+            #     iter_batch_size = len(unique_labels)
+            # if len(unique_labels) == 0:
+            #     break
 
     def __len__(self):
         return len(self.dataset) // self.batch_size

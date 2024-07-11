@@ -8,4 +8,4 @@
 
 - CLIP
 
-    `/root/outputs/2024-07-09/19-34-54/model_best.pt`
+    `/root/outputs/2024-07-10/19-41-05/model_best.pt`
