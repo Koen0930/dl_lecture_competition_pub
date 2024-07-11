@@ -183,8 +183,6 @@ class BalancedClassBatchSampler(BatchSampler):
             if len(unique_labels) < iter_batch_size:
                 iter_batch_size = len(unique_labels)
             if len(unique_labels) == 0:
-                print(self.batch_size)
-                print(iter_batch_size)
                 break
 
     def __len__(self):

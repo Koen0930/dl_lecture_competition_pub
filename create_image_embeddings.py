@@ -16,7 +16,7 @@ from src.datasets import ImageDataset
 def run():
     set_seed(42)
     save_dir = "data"
-    device = "cuda:0"
+    device = "cpu"
     # ------------------
     #       Transform
     # ------------------
@@ -51,11 +51,15 @@ def run():
     #       Embedding
     # ------------------
     embeddings_list = []
-    for X, y in tqdm(train_loader, desc="Train"):
-        X, y = X.to(device), y.to(device)
-        embeddings = model(X)
-        embeddings = embeddings.cpu()
-        embeddings_list.append(embeddings)
+    # for X, y in tqdm(train_loader, desc="Train"):
+    #     X, y = X.to(device), y.to(device)
+    #     embeddings = model(X)
+    #     embeddings = embeddings.cpu()
+    #     embeddings_list.append(embeddings)
+    #     # 使い終わったXとyをGPUから外す
+    #     del X, y
+    #     torch.cuda.empty_cache()  # 未使用のメモリを解放
+        
     for X, y in tqdm(val_loader, desc="Val"):
         X, y = X.to(device), y.to(device)
         embeddings = model(X)
