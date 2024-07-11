@@ -13,10 +13,9 @@ from tqdm import tqdm
 from topk.svm import SmoothTopkSVM
 
 from src.datasets import ImageMEGDataset, BalancedClassBatchSampler
-from src.models import CLIPModel, CLIPLoss
+from src.clip import CLIPModel, CLIPLoss
 from src.utils import set_seed
-from src.conformer import Conformer
-from src.utils import MEGEncoder
+
 
 os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'  # すべてのGPUを指定
