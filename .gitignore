@@ -2,7 +2,6 @@ data/*
 !data/.gitkeep
 
 outputs/
-preprocess.py
 eval_omnicampus.py
 .github/
 .bash_history
