@@ -1,4 +1,4 @@
-batch_size: 64
+batch_size: 32
 epochs: 40
 lr: 0.001
 weight_decay: 0.0001
@@ -9,16 +9,16 @@ image_weight_path: /root/outputs/2024-07-08/20-51-06/model_best.pt
 meg_encoder: eeg
 
 loss: topk
-loss_weight: 0.5
+loss_weight: 0.9
 
 device: cuda:0
 num_workers: 8
 seed: 1234
-use_wandb: True
+use_wandb: False
 
 balanced_sampling: False
 
 data_dir: data
 
 # Evaluation
-model_path: 
+model_path: /root/outputs/2024-07-12/16-41-05/model_best.pt
