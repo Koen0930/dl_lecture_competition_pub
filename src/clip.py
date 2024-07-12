@@ -35,7 +35,7 @@ class CLIPModel(nn.Module):
             raise ValueError(f"Unsupported image encoder: {image_encoder}")
         
         if meg_encoder == "eeg":
-            self.meg_encoder = Enc_eeg(position_list, out_channels=self.emb_dim)
+            self.meg_encoder = Enc_eeg(position_list=position_list, out_channels=self.emb_dim)
             
         elif meg_encoder == "meg":
             self.meg_encoder = MEGEncoder(position_list, out_channels=self.emb_dim)

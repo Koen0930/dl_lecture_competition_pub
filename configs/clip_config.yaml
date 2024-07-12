@@ -14,7 +14,7 @@ loss_weight: 0.5
 device: cuda:0
 num_workers: 8
 seed: 1234
-use_wandb: False
+use_wandb: True
 
 balanced_sampling: False
 

@@ -399,7 +399,7 @@ class FlattenHead(nn.Sequential):
 class Enc_eeg(nn.Sequential):
     def __init__(
         self,
-        positions,
+        position_list,
         n_subjects: int = 4,
         in_channels: int = 271,
         out_channels: int = 2048,
@@ -412,7 +412,7 @@ class Enc_eeg(nn.Sequential):
         
         self.ga = ResidualAdd(
             nn.Sequential(
-                EEG_GAT(),
+                EEG_GAT(position_list),
                 nn.Dropout(0.3),
                 )
         )
@@ -420,6 +420,13 @@ class Enc_eeg(nn.Sequential):
                 nn.Sequential(
                     nn.LayerNorm(244),
                     channel_attention(),
+                    nn.Dropout(0.3),
+                )
+        )
+        self.ta = ResidualAdd(
+                nn.Sequential(
+                    nn.LayerNorm(271),
+                    time_attention(),
                     nn.Dropout(0.3),
                 )
         )
@@ -489,29 +496,109 @@ class channel_attention(nn.Module):
         return out
 
 
+class time_attention(nn.Module):
+    def __init__(self, channel_num=271, inter=1):
+        super(time_attention, self).__init__()
+        self.channel_num = channel_num
+        self.inter = inter
+        self.extract_sequence = int(self.channel_num / self.inter)  # You could choose to do that for less computation
+
+        self.query = nn.Sequential(
+            nn.Linear(channel_num, channel_num),
+            nn.LayerNorm(channel_num), 
+            nn.Dropout(0.3)
+        )
+        self.key = nn.Sequential(
+            nn.Linear(channel_num, channel_num),
+            nn.LayerNorm(channel_num),
+            nn.Dropout(0.3)
+        )
+        self.value = nn.Sequential(
+            nn.Linear(channel_num, channel_num),
+            nn.LayerNorm(channel_num),
+            nn.Dropout(0.3)
+        )
+
+        self.projection = nn.Sequential(
+            nn.Linear(channel_num, channel_num),
+            nn.LayerNorm(channel_num),
+            nn.Dropout(0.3),
+        )
+
+        self.drop_out = nn.Dropout(0)
+        self.pooling = nn.AvgPool2d(kernel_size=(1, self.inter), stride=(1, self.inter))
+
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_normal_(m.weight)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0.0)
+
+    def forward(self, x):
+        channel_query = self.query(x)
+        channel_key = self.key(x)
+        channel_value = self.value(x)
+
+        scaling = self.extract_sequence ** (1 / 2)
+
+        channel_atten = torch.bmm(channel_query, torch.transpose(channel_key, 2, 1)) / scaling
+
+        channel_atten_score = F.softmax(channel_atten, dim=-1)
+        channel_atten_score = self.drop_out(channel_atten_score)
+
+        out = torch.bmm(channel_atten_score, channel_value)
+
+        out = self.projection(out)
+        return out
+
+
 from torch_geometric.nn import GATConv
 class EEG_GAT(nn.Module):
-    def __init__(self, in_channels=244, out_channels=244):
+    def __init__(self, position_list, in_channels=244, out_channels=244):
         super(EEG_GAT, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.conv1 = GATConv(in_channels=in_channels, out_channels=out_channels, heads=1)
-        self.conv2 = GATConv(in_channels=out_channels, out_channels=out_channels, heads=1)
+        # self.conv2 = GATConv(in_channels=out_channels, out_channels=out_channels, heads=1)
         self.drop_out = nn.Dropout(0.3)
 
         self.num_channels = 271
         # Create a list of tuples representing all possible edges between channels
         # self.edge_index_list = torch.Tensor([(i, j) for i in range(self.num_channels) for j in range(self.num_channels) if i != j]).cuda()
-        self.edge_index_list = torch.load("/root/data/top6_edge_index_list.pt").T.cuda()
+        self.edge_index_list = self.topk_neighbor(position_list, k=6)
+        
         # Convert the list of tuples to a tensor
-        self.edge_index = torch.tensor(self.edge_index_list, dtype=torch.long).t().contiguous().cuda()
+        self.edge_index = torch.tensor(self.edge_index_list, dtype=torch.long).T.contiguous().cuda()
+    
+    
+    def topk_neighbor(self, position_list, k=6):
+        dist_list = []
+        for pos1 in position_list:
+            dist = []
+            # 距離を計算
+            for pos2 in position_list:
+                dist.append(torch.norm(pos1 - pos2))
+            dist_list.append(dist)
+        dist_list = torch.tensor(dist_list)
+        topk_list = []
+        for i in range(len(dist_list)):
+            indexed_dist_list = list(enumerate(dist_list[i]))
+            sorted_indexed_dist_list = sorted(indexed_dist_list, key=lambda x: x[1])
+            # ソートされたリストの上位5個の要素からインデックスのみを抽出
+            top_k_indices = [index for index, value in sorted_indexed_dist_list[:k]]
+            topk_list.append(top_k_indices)
+        edge_index_list = []
+        for i in range(len(topk_list)):
+            for j in range(len(topk_list[i])):
+                if i != topk_list[i][j]:
+                    edge_index_list.append((i, topk_list[i][j]))
+        return edge_index_list
 
     def forward(self, x):
         batch_size, num_channels, num_features = x.size()
         x = x.view(batch_size*num_channels, num_features)
         x = self.conv1(x, self.edge_index)
-        x = F.leaky_relu(x, slope=0.2)
         x = self.drop_out(x)
-        x = self.conv2(x, self.edge_index)
+        # x = self.conv2(x, self.edge_index)
         x = x.view(batch_size, num_channels, -1)
         return x
