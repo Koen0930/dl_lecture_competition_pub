@@ -14,6 +14,9 @@ eval_omnicampus.py
 .config/
 .vscode/
 .mne/
+.vscode-server/
+.dotnet/
+mne_data/
 
 # -------------------
 #   Python template

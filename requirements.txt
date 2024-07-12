@@ -1,6 +1,7 @@
 future
 scikit-learn
 torch==2.0.1
+torch_geometric
 torchaudio
 torchvision
 torchmetrics==0.11.4
