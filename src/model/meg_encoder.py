@@ -425,7 +425,7 @@ class Enc_eeg(nn.Sequential):
         )
         
     def forward(self, x, subjects):
-        # x = self.ca(x)
+        x = self.ga(x)
         x = self.initial_layer(x)
         x = self.subject_layers(x, subjects)
         x = x.unsqueeze(dim=1)
@@ -434,7 +434,7 @@ class Enc_eeg(nn.Sequential):
 
 
 class channel_attention(nn.Module):
-    def __init__(self, sequence_num=281, inter=1):
+    def __init__(self, sequence_num=244, inter=1):
         super(channel_attention, self).__init__()
         self.sequence_num = sequence_num
         self.inter = inter
@@ -458,7 +458,7 @@ class channel_attention(nn.Module):
 
         self.projection = nn.Sequential(
             nn.Linear(sequence_num, sequence_num),
-            nn.LayerNorm(64),
+            nn.LayerNorm(sequence_num),
             nn.Dropout(0.3),
         )
 
@@ -491,25 +491,27 @@ class channel_attention(nn.Module):
 
 from torch_geometric.nn import GATConv
 class EEG_GAT(nn.Module):
-    def __init__(self, in_channels=271, out_channels=271):
+    def __init__(self, in_channels=244, out_channels=244):
         super(EEG_GAT, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.conv1 = GATConv(in_channels=in_channels, out_channels=out_channels, heads=1)
-        # self.conv2 = GATConv(in_channels=out_channels, out_channels=out_channels, heads=1)
+        self.conv2 = GATConv(in_channels=out_channels, out_channels=out_channels, heads=1)
+        self.drop_out = nn.Dropout(0.3)
 
-        self.num_channels = 64
+        self.num_channels = 271
         # Create a list of tuples representing all possible edges between channels
-        self.edge_index_list = torch.Tensor([(i, j) for i in range(self.num_channels) for j in range(self.num_channels) if i != j]).cuda()
+        # self.edge_index_list = torch.Tensor([(i, j) for i in range(self.num_channels) for j in range(self.num_channels) if i != j]).cuda()
+        self.edge_index_list = torch.load("/root/data/top6_edge_index_list.pt").T.cuda()
         # Convert the list of tuples to a tensor
         self.edge_index = torch.tensor(self.edge_index_list, dtype=torch.long).t().contiguous().cuda()
 
     def forward(self, x):
-
         batch_size, num_channels, num_features = x.size()
         x = x.view(batch_size*num_channels, num_features)
         x = self.conv1(x, self.edge_index)
+        x = F.leaky_relu(x, slope=0.2)
+        x = self.drop_out(x)
+        x = self.conv2(x, self.edge_index)
         x = x.view(batch_size, num_channels, -1)
-        x = x.unsqueeze(1)
-        
         return x
