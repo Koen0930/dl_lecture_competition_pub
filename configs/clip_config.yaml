@@ -4,21 +4,21 @@ lr: 0.001
 weight_decay: 0.0001
 
 image_encoder: efficientnet_v2_s
-image_weight_path: /root/outputs/2024-07-08/20-51-06/model_best.pt
+image_weight_path: outputs/model_best.pt
 
 meg_encoder: eeg
 
 loss: topk
-loss_weight: 0.9
+loss_weight: 0.75
 
 device: cuda:0
 num_workers: 8
 seed: 1234
-use_wandb: False
+use_wandb: True
 
 balanced_sampling: False
 
 data_dir: data
 
 # Evaluation
-model_path: /root/outputs/2024-07-12/16-41-05/model_best.pt
+model_path: outputs/2024-07-13/05-07-22/model_best.pt

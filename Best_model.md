@@ -8,4 +8,4 @@
 
 - CLIP
 
-    `/home/yusei.koen/DL/dl_lecture_competition_pub/outputs/2024-07-11/20-07-58/model_best.pt`
+    `/home/acf15519ro/DL_basic/dl_lecture_competition_pub/outputs/2024-07-13/20-36-41/model_best.pt`
