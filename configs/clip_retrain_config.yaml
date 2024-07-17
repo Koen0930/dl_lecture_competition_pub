@@ -19,4 +19,4 @@ use_wandb: False
 data_dir: data
 
 # Evaluation
-model_path: outputs/2024-07-09/10-39-15/model_best.pt
+model_path:

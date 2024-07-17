@@ -17,7 +17,7 @@ from src.clip import CLIPModel, CLIPLoss, ClassifierModel
 from src.utils import set_seed
 
 os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2'  # すべてのGPUを指定
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'  # すべてのGPUを指定
 
 @hydra.main(version_base=None, config_path="configs", config_name="clip_retrain_config")
 def run(args: DictConfig):

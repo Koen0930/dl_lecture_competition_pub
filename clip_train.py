@@ -90,7 +90,7 @@ def run(args: DictConfig):
     ).to(args.device)
 
     
-    # model.load_state_dict(torch.load("outputs/2024-07-17/07-14-39/model_best.pt"))
+    # model.load_state_dict(torch.load("outputs/model_best2.pt"))
 
     # ------------------
     #     Optimizer
@@ -121,25 +121,25 @@ def run(args: DictConfig):
         
         train_loss, train_acc, val_loss, val_acc = [], [], [], []
         
-        model.train()
-        for image, meg, subject_idxs, y in tqdm(train_loader, desc="Train"):
-            image, meg, subject_idxs, y = image.to(args.device), meg.to(args.device), subject_idxs.to(args.device), y.to(args.device)
-            encoded_image, encoded_meg = model(image, meg, subject_idxs)
+        # model.train()
+        # for image, meg, subject_idxs, y in tqdm(train_loader, desc="Train"):
+        #     image, meg, subject_idxs, y = image.to(args.device), meg.to(args.device), subject_idxs.to(args.device), y.to(args.device)
+        #     encoded_image, encoded_meg = model(image, meg, subject_idxs)
             
-            y_pred = model.final_layer(encoded_meg)
+        #     y_pred = model.final_layer(encoded_meg)
             
-            # lossの計算
-            clip_loss = loss_fn(encoded_image, encoded_meg, y)
-            pred_loss = loss_fn2(y_pred, y)
-            loss = loss_weight * clip_loss + (1 - loss_weight) * pred_loss
-            train_loss.append(loss.item())
+        #     # lossの計算
+        #     clip_loss = loss_fn(encoded_image, encoded_meg, y)
+        #     pred_loss = loss_fn2(y_pred, y)
+        #     loss = loss_weight * clip_loss + (1 - loss_weight) * pred_loss
+        #     train_loss.append(loss.item())
             
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+        #     optimizer.zero_grad()
+        #     loss.backward()
+        #     optimizer.step()
             
-            acc = accuracy(y_pred, y)
-            train_acc.append(acc.item())
+        #     acc = accuracy(y_pred, y)
+        #     train_acc.append(acc.item())
 
         model.eval()
         for image, meg, subject_idxs, y in tqdm(val_loader, desc="Validation"):
@@ -158,7 +158,8 @@ def run(args: DictConfig):
             
             val_loss.append(loss.item())
 
-        print(f"Epoch {epoch+1}/{args.epochs} | train loss: {np.mean(train_loss):.3f} | train acc: {np.mean(train_acc):.3f} | val loss: {np.mean(val_loss):.3f} | val acc: {np.mean(val_acc):.3f}")
+        # print(f"Epoch {epoch+1}/{args.epochs} | train loss: {np.mean(train_loss):.3f} | train acc: {np.mean(train_acc):.3f} | val loss: {np.mean(val_loss):.3f} | val acc: {np.mean(val_acc):.3f}")
+        print(f"Epoch {epoch+1}/{args.epochs} val loss: {np.mean(val_loss):.3f} | val acc: {np.mean(val_acc):.3f}")
         torch.save(model.state_dict(), os.path.join(logdir, "model_last.pt"))
         if args.use_wandb:
             wandb.log({"train_loss": np.mean(train_loss), "train_acc": np.mean(train_acc), "val_loss": np.mean(val_loss), "val_acc": np.mean(val_acc)})
