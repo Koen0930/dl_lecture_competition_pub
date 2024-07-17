@@ -5,6 +5,7 @@ from torchvision import models, transforms
 import torch.nn.functional as F
 from torchmetrics import Accuracy
 import torch.nn as nn
+from torch.optim import lr_scheduler
 import hydra
 from omegaconf import DictConfig
 import wandb
@@ -18,7 +19,7 @@ from src.utils import set_seed
 
 
 os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'  # すべてのGPUを指定
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'  # すべてのGPUを指定
 
 @hydra.main(version_base=None, config_path="configs", config_name="clip_config")
 def run(args: DictConfig):
@@ -73,7 +74,7 @@ def run(args: DictConfig):
         train_loader = torch.utils.data.DataLoader(train_set, shuffle=True, **loader_args)
         val_loader = torch.utils.data.DataLoader(val_set, shuffle=False, **loader_args)
     
-    position_list = torch.load("/root/data/position_list.pt").to(args.device)
+    position_list = torch.load("data/position_list.pt").to(args.device)
     
     print("* data loading done")
     # ------------------
@@ -87,12 +88,16 @@ def run(args: DictConfig):
         meg_encoder=args.meg_encoder,
         num_classes=train_set.num_classes
     ).to(args.device)
+
     
+    # model.load_state_dict(torch.load("outputs/2024-07-17/07-14-39/model_best.pt"))
 
     # ------------------
     #     Optimizer
     # ------------------
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    # 3. MultiStepLR
+    # multistep_scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[15, 16, 17], gamma=0.1)
 
     # ------------------
     #   Start training
@@ -162,6 +167,7 @@ def run(args: DictConfig):
             cprint("New best.", "cyan")
             torch.save(model.state_dict(), os.path.join(logdir, "model_best.pt"))
             min_val_acc = np.mean(val_acc)
+        # multistep_scheduler.step()
 
 
 if __name__ == "__main__":

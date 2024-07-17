@@ -15,7 +15,7 @@ from src.utils import set_seed
 
 
 @torch.no_grad()
-@hydra.main(version_base=None, config_path="configs", config_name="config")
+@hydra.main(version_base=None, config_path="configs", config_name="clip_config")
 def run(args: DictConfig):
     set_seed(args.seed)
     savedir = os.path.dirname(args.model_path)
@@ -27,7 +27,7 @@ def run(args: DictConfig):
     test_loader = torch.utils.data.DataLoader(
         test_set, shuffle=False, batch_size=args.batch_size, num_workers=args.num_workers
     )
-    position_list = torch.load("/root/data/position_list.pt").to(args.device)
+    position_list = torch.load("data/position_list.pt").to(args.device)
 
     # ------------------
     #       Model

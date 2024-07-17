@@ -102,7 +102,6 @@ def train_and_evaluate(args, trial):
     
     max_val_acc = -float("inf")
     early_stopping_count = 0
-    last_acc = 0
     
     for epoch in range(args.epochs):
         print(f"Epoch {epoch+1}/{args.epochs}")
@@ -160,7 +159,7 @@ def train_and_evaluate(args, trial):
         if early_stopping_count > 2:
             print(f"EPOCH{epoch}: early stopping")
             break
-        if torch.isnan(val_loss):
+        if np.isnan(np.mean(val_loss)):
             print(f"NaN detected")
             break
         

@@ -346,7 +346,7 @@ class MEGEncoder(nn.Module):
 
 
 class PatchEmbedding(nn.Module):
-    def __init__(self, out_channels=2048):
+    def __init__(self, out_channels=2048, dropout_rate=0.5):
         super().__init__()
         # revised from shallownet
         self.tsconv = nn.Sequential(
@@ -357,7 +357,7 @@ class PatchEmbedding(nn.Module):
             nn.Conv2d(20, 10, (33, 1), (1, 1)),
             nn.BatchNorm2d(10),
             nn.ELU(),
-            nn.Dropout(0.5),
+            nn.Dropout(dropout_rate),
         )
 
         self.projection = nn.Sequential(
@@ -394,12 +394,15 @@ class FlattenHead(nn.Sequential):
     def forward(self, x):
         x = x.contiguous().view(x.size(0), -1)
         return x
-
+                
 
 class Enc_eeg(nn.Sequential):
     def __init__(
         self,
         position_list,
+        gat_dropout=0.3,
+        graph_k=6,
+        pa_dropout_rate=0.5,
         n_subjects: int = 4,
         in_channels: int = 271,
         out_channels: int = 2048,
@@ -408,12 +411,12 @@ class Enc_eeg(nn.Sequential):
         super().__init__()
         self.initial_layer = InitialLayer(initial_linear=in_channels, initial_depth=1)
         self.subject_layers = SubjectLayers(in_channels, in_channels, n_subjects, init_id)
-        self.patchembedding = PatchEmbedding(out_channels)
+        self.patchembedding = PatchEmbedding(out_channels, pa_dropout_rate)
         
         self.ga = ResidualAdd(
             nn.Sequential(
-                EEG_GAT(position_list),
-                nn.Dropout(0.3),
+                EEG_GAT(position_list, dropout_rate=gat_dropout, k=graph_k),
+                nn.Dropout(gat_dropout),
                 )
         )
         self.ca = ResidualAdd(
@@ -554,18 +557,18 @@ class time_attention(nn.Module):
 
 from torch_geometric.nn import GATConv
 class EEG_GAT(nn.Module):
-    def __init__(self, position_list, in_channels=244, out_channels=244):
+    def __init__(self, position_list, in_channels=244, out_channels=244, dropout_rate=0.3, k=6):
         super(EEG_GAT, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.conv1 = GATConv(in_channels=in_channels, out_channels=out_channels, heads=1)
         # self.conv2 = GATConv(in_channels=out_channels, out_channels=out_channels, heads=1)
-        self.drop_out = nn.Dropout(0.3)
+        self.drop_out = nn.Dropout(dropout_rate)
 
         self.num_channels = 271
         # Create a list of tuples representing all possible edges between channels
         # self.edge_index_list = torch.Tensor([(i, j) for i in range(self.num_channels) for j in range(self.num_channels) if i != j]).cuda()
-        self.edge_index_list = self.topk_neighbor(position_list, k=6)
+        self.edge_index_list = self.topk_neighbor(position_list, k=k)
         
         # Convert the list of tuples to a tensor
         self.edge_index = torch.tensor(self.edge_index_list, dtype=torch.long).T.contiguous().cuda()
