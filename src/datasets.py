@@ -17,7 +17,6 @@ class ThingsMEGDataset(torch.utils.data.Dataset):
         assert split in ["train", "val", "test"], f"Invalid split: {split}"
         self.split = split
         self.num_classes = 1854
-        
         self.X = torch.load(os.path.join(data_dir, f"preprocessed_{split}_X.pt"))
         self.subject_idxs = torch.load(os.path.join(data_dir, f"{split}_subject_idxs.pt"))
         
@@ -117,7 +116,7 @@ class ImageMEGDataset(torch.utils.data.Dataset):
                 lines[i] = line
         
         self.image_paths = lines
-        
+    
         self.meg = torch.load(os.path.join(data_dir, f"preprocessed_{split}_X.pt"))
         self.subject_idxs = torch.load(os.path.join(data_dir, f"{split}_subject_idxs.pt"))
         
@@ -129,13 +128,9 @@ class ImageMEGDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, i):
         if self.transform:
-            self.image = Image.open(f"/root/data/Images/{self.image_paths[i]}")
+            self.image = Image.open(f"data/Images/{self.image_paths[i]}")
             self.image = self.transform(self.image)
             return self.image, self.meg[i], self.subject_idxs[i], self.y[i]
-        # ラベルを用意してそこからサンプリングする形にすれば良くね
-        # class0:{index: [subject_idx, y, meg, image], ...}
-        # class1:{index: [subject_idx, y, meg, image], ...}
-        # ...
         
     @property
     def height(self) -> int:

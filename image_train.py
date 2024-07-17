@@ -19,7 +19,7 @@ from src.conformer import Conformer
 from src.utils import MEGEncoder
 
 os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'  # すべてのGPUを指定
+os.environ['CUDA_VISIBLE_DEVICES'] = 0'  # すべてのGPUを指定
 
 @hydra.main(version_base=None, config_path="configs", config_name="image_config")
 def run(args: DictConfig):

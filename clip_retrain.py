@@ -1,24 +1,23 @@
 import os, sys
 import numpy as np
 import torch
+from torchvision import models, transforms
 import torch.nn.functional as F
 from torchmetrics import Accuracy
+import torch.nn as nn
 import hydra
 from omegaconf import DictConfig
 import wandb
 from termcolor import cprint
 from tqdm import tqdm
 from topk.svm import SmoothTopkSVM
-import torch.nn as nn
 
 from src.datasets import ThingsMEGDataset
-from src.models import CLIPModel, ClassifierModel
+from src.clip import CLIPModel, CLIPLoss, ClassifierModel
 from src.utils import set_seed
-from src.conformer import Conformer
-from src.utils import MEGEncoder
 
 os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2'  # すべてのGPUを指定
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'  # すべてのGPUを指定
 
 @hydra.main(version_base=None, config_path="configs", config_name="clip_retrain_config")
 def run(args: DictConfig):
@@ -41,7 +40,7 @@ def run(args: DictConfig):
     test_loader = torch.utils.data.DataLoader(
         test_set, shuffle=False, batch_size=args.batch_size, num_workers=args.num_workers
     )
-    position_list = torch.load("/root/data/position_list.pt").to(args.device)
+    position_list = torch.load("data/position_list.pt").to(args.device)
     # ------------------
     #       Model
     # ------------------
@@ -50,19 +49,18 @@ def run(args: DictConfig):
         position_list=position_list,
         im_weight_path=args.image_weight_path,
         image_encoder=args.image_encoder,
+        meg_encoder=args.meg_encoder,
         num_classes=train_set.num_classes
     ).to(args.device)
     
-    model.load_state_dict(torch.load("/root/outputs/2024-07-09/19-34-54/model_best.pt"))
+    model.load_state_dict(torch.load("outputs/2024-07-13/18-28-53/model_best.pt"))
     
     classifier = ClassifierModel(model).to(args.device)
-    for name, param in list(classifier.named_parameters())[:-2]:
-        param.requires_grad = False
             
     # ------------------
     #     Optimizer
     # ------------------
-    optimizer = torch.optim.Adam(classifier.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adam(classifier.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
     # ------------------
     #   Start training

@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -8,6 +9,13 @@ from .model import MEGEncoder, Enc_eeg
 from typing import List
 
 
+def initialize_weights(m):
+        if isinstance(m, nn.Linear):
+            nn.init.kaiming_normal_(m.weight)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+                
+
 class CLIPModel(nn.Module):
     def __init__(
         self,
@@ -15,7 +23,10 @@ class CLIPModel(nn.Module):
         im_weight_path: str,
         image_encoder: str,
         meg_encoder: str,
-        num_classes: int
+        num_classes: int,
+        gat_dropout=0.05681150010578299,
+        graph_k=154,
+        pa_dropout_rate=0.11003528220351602,
     ) -> None:
         super().__init__()
         if image_encoder == "resnet50":
@@ -35,7 +46,13 @@ class CLIPModel(nn.Module):
             raise ValueError(f"Unsupported image encoder: {image_encoder}")
         
         if meg_encoder == "eeg":
-            self.meg_encoder = Enc_eeg(position_list=position_list, out_channels=self.emb_dim)
+            self.meg_encoder = Enc_eeg(
+                position_list=position_list,
+                gat_dropout=gat_dropout,
+                graph_k=graph_k,
+                pa_dropout_rate=pa_dropout_rate,
+                out_channels=self.emb_dim
+            )
             
         elif meg_encoder == "meg":
             self.meg_encoder = MEGEncoder(position_list, out_channels=self.emb_dim)
@@ -43,6 +60,7 @@ class CLIPModel(nn.Module):
             param.requires_grad = False
         # for param in self.final_layer.parameters():
         #     param.requires_grad = False
+        self.meg_encoder.apply(initialize_weights)
 
     def forward(self, image: torch.Tensor, meg: torch.Tensor, subject: torch.Tensor) -> torch.Tensor:
         encoded_image = self.ImageEncoder(image)
@@ -51,44 +69,35 @@ class CLIPModel(nn.Module):
 
 
 class CLIPLoss(nn.Module):
-    def __init__(self, temperature=1) -> None:
+    def __init__(self) -> None:
         super().__init__()
-        self.temperature = torch.tensor(temperature)
-
-    def create_label_matrix(self, y: torch.Tensor) -> torch.Tensor:
-        # Create a zero matrix of shape (batch_size, batch_size)
-        label_matrix = torch.eye(y.size(0), device=y.device)
-        
-        # Set the appropriate elements to 1
-        y = y.unsqueeze(0)
-        label_matrix = (y == y.T).float()
-        return label_matrix
-    
-    def cross_entropy_loss(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-        # Vectorized cross entropy loss
-        loss = -(labels * torch_log(logits) + (1 - labels) * torch_log(1 - logits))
-        return loss.sum()
+        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
 
     def forward(self, encoded_image: torch.Tensor, encoded_meg: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         # Normalize the embeddings
         encoded_image = F.normalize(encoded_image, dim=-1)
         encoded_meg = F.normalize(encoded_meg, dim=-1)
         
-        logits = torch.matmul(encoded_image, encoded_meg.T) * torch.exp(self.temperature)
+        logit_scale = self.logit_scale.exp()
+        # image_cos_similarity_matrix = torch.mm(encoded_image, encoded_image.transpose(0, 1))
+        # meg_cos_similarity_matrix = torch.mm(encoded_meg, encoded_meg.transpose(0, 1))
+        # meg_img_cos_similarity = F.cosine_similarity(meg_cos_similarity_matrix, image_cos_similarity_matrix)
+        # meg_img_cos_sim_loss = 1 - meg_img_cos_similarity.mean()
+        
+        logits_per_image = logit_scale * encoded_image @ encoded_meg.t()
+        logits_per_meg = logits_per_image.t()
+        # logits = torch.matmul(logits_per_image, encoded_meg.T) * torch.exp(self.temperature)
 
         # symmetric loss function
         labels = torch.arange(encoded_image.size(0))
-        labels = labels.to(logits.device)
-        loss_i = F.cross_entropy(logits.transpose(0, 1), labels)
-        loss_t = F.cross_entropy(logits, labels)
-        loss = (loss_i + loss_t)/2
+        labels = labels.to(logits_per_image.device)
+        loss_i = F.cross_entropy(logits_per_image, labels)
+        loss_m = F.cross_entropy(logits_per_meg, labels)
+        loss = (loss_i + loss_m)/2
         # labels = self.create_label_matrix(y)
         # loss = self.cross_entropy_loss(logits, labels)
         
         return loss
-
-def torch_log(x: torch.Tensor) -> torch.Tensor:
-    return torch.log(torch.clamp(x, min=1e-10))
 
 
 class ClassifierModel(nn.Module):

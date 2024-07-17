@@ -1,19 +1,22 @@
-batch_size: 128
+batch_size: 32
 epochs: 40
 lr: 0.001
+weight_decay: 0.0001
 
 image_encoder: efficientnet_v2_s
-image_weight_path: /root/outputs/2024-07-08/20-51-06/model_best.pt
+image_weight_path: outputs/model_best.pt
+
+meg_encoder: eeg
 
 loss: topk 
 # loss: ce
 
 device: cuda:0
-num_workers: 4
+num_workers: 8
 seed: 1234
 use_wandb: False
 
 data_dir: data
 
 # Evaluation
-model_path: outputs/2024-07-09/10-39-15/model_best.pt
+model_path:
