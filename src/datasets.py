@@ -17,15 +17,7 @@ class ThingsMEGDataset(torch.utils.data.Dataset):
         assert split in ["train", "val", "test"], f"Invalid split: {split}"
         self.split = split
         self.num_classes = 1854
-        
-        if split == "train":
-            meg_list = []
-            for i in range(4):
-                meg = torch.load(os.path.join(data_dir, f"preprocessed_{split}_X{i}.pt"))
-                meg_list.append(meg)
-            self.X = torch.cat(meg_list)
-        else:
-            self.X = torch.load(os.path.join(data_dir, f"preprocessed_{split}_X.pt"))
+        self.X = torch.load(os.path.join(data_dir, f"preprocessed_{split}_X.pt"))
         self.subject_idxs = torch.load(os.path.join(data_dir, f"{split}_subject_idxs.pt"))
         
         if split in ["train", "val"]:
@@ -124,15 +116,8 @@ class ImageMEGDataset(torch.utils.data.Dataset):
                 lines[i] = line
         
         self.image_paths = lines
-        
-        if split == "train":
-            meg_list = []
-            for i in range(4):
-                meg = torch.load(os.path.join(data_dir, f"preprocessed_{split}_X{i}.pt"))
-                meg_list.append(meg)
-            self.meg = torch.cat(meg_list)
-        else:
-            self.meg = torch.load(os.path.join(data_dir, f"preprocessed_{split}_X.pt"))
+    
+        self.meg = torch.load(os.path.join(data_dir, f"preprocessed_{split}_X.pt"))
         self.subject_idxs = torch.load(os.path.join(data_dir, f"{split}_subject_idxs.pt"))
         
         self.y = torch.load(os.path.join(data_dir, f"{split}_y.pt"))
@@ -146,10 +131,6 @@ class ImageMEGDataset(torch.utils.data.Dataset):
             self.image = Image.open(f"data/Images/{self.image_paths[i]}")
             self.image = self.transform(self.image)
             return self.image, self.meg[i], self.subject_idxs[i], self.y[i]
-        # ラベルを用意してそこからサンプリングする形にすれば良くね
-        # class0:{index: [subject_idx, y, meg, image], ...}
-        # class1:{index: [subject_idx, y, meg, image], ...}
-        # ...
         
     @property
     def height(self) -> int:
